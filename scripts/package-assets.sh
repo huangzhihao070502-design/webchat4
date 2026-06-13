@@ -49,6 +49,7 @@ echo "Creating rootfs.tar.gz..."
 cd "$PROJECT_DIR"
 tar -czf "$ASSETS_DIR/rootfs.tar.gz" \
     --owner=0 --group=0 \
+    --ignore-failed-read \
     rootfs/
 
 # 2. Copy proot binary
