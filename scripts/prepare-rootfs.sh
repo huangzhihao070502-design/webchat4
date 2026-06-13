@@ -8,7 +8,10 @@ APK_CACHE="/tmp/apk-cache"
 mkdir -p "$APK_CACHE"
 
 # Download static apk-tools for ARM64
-APK_URL="https://dl-cdn.alpinelinux.org/alpine/latest-stable/main/aarch64/apk-tools-static-2.14.10-r0.apk"
+# Fetch latest apk-tools-static version dynamically
+APK_URL=$(curl -s "https://dl-cdn.alpinelinux.org/alpine/latest-stable/main/aarch64/" | grep -o 'apk-tools-static-[^"]*\.apk' | tail -1)
+APK_URL="https://dl-cdn.alpinelinux.org/alpine/latest-stable/main/aarch64/${APK_URL}"
+echo "Using apk-tools-static: $APK_URL"
 APK_FILE="/tmp/apk-tools-static.apk"
 
 if [ ! -f "$APK_FILE" ]; then
