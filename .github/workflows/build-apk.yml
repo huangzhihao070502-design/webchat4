@@ -61,14 +61,11 @@ jobs:
       - name: Download PRoot for Android ARM64
         run: |
           mkdir -p assets-tmp
-          curl -L -o assets-tmp/proot-arm64 \
-            "https://github.com/termux/proot/releases/download/v5.4.0/proot-aarch64" || \
           curl -L -o /tmp/proot.deb \
-            "https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.4.0_aarch64.deb" && \
-            dpkg-deb -x /tmp/proot.deb /tmp/proot-extract && \
-            find /tmp/proot-extract -name "proot" -type f -exec cp {} assets-tmp/proot-arm64 \;
+            "https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107.78-1_aarch64.deb"
+          dpkg-deb -x /tmp/proot.deb /tmp/proot-extract
+          find /tmp/proot-extract -name "proot" -type f -exec cp {} assets-tmp/proot-arm64 \;
           chmod +x assets-tmp/proot-arm64
-          # Verify it's a valid ARM64 ELF binary
           file assets-tmp/proot-arm64
           if ! file assets-tmp/proot-arm64 | grep -q "ELF.*aarch64\|ELF.*ARM"; then
             echo "ERROR: proot binary is not a valid ARM64 ELF!"
