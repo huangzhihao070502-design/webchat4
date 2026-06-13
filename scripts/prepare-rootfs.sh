@@ -49,11 +49,17 @@ echo "Installing Alpine base + Node.js..."
 $APK_STATIC --arch aarch64 --usermode \
     -X "https://dl-cdn.alpinelinux.org/alpine/latest-stable/main" \
     -U --allow-untrusted --root "$ROOTFS_DIR" --initdb \
-    add alpine-base nodejs
+    add alpine-base nodejs || true
+# Note: exit code 6+ means post-install scripts failed (unshare not permitted in container),
+# but packages themselves are installed correctly. We ignore this error.
 
-# Verify
-echo "Node.js: $(ls -lh $ROOTFS_DIR/usr/bin/node 2>/dev/null || echo 'NOT FOUND')"
-echo "npm: $(ls -lh $ROOTFS_DIR/usr/bin/npm 2>/dev/null || echo 'NOT FOUND')"
+# Verify (hard check - fail if node wasn't actually installed)
+if [ ! -f "$ROOTFS_DIR/usr/bin/node" ]; then
+    echo "ERROR: Node.js was NOT installed!"
+    exit 1
+fi
+echo "Node.js: $(ls -lh $ROOTFS_DIR/usr/bin/node)"
+echo "npm: $(ls -lh $ROOTFS_DIR/usr/bin/npm 2>/dev/null || echo 'npm not found (not critical)')"
 
 # Create directories for webchat4
 mkdir -p "$ROOTFS_DIR/home/webchat4"
