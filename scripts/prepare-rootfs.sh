@@ -24,7 +24,7 @@ echo "Extracting apk-tools..."
 mkdir -p /tmp/apk-extract
 tar -xzf "$APK_FILE" -C /tmp/apk-extract
 
-APK_STATIC=$(find /tmp/apk-extract -name "apk" -type f | head -1)
+APK_STATIC=$(find /tmp/apk-extract -name "apk.static" -type f | head -1)
 if [ -z "$APK_STATIC" ]; then
     echo "apk binary not found!"
     ls -la /tmp/apk-extract/
