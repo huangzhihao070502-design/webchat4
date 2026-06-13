@@ -1,0 +1,144 @@
+name: Build WebChat4 APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  ANDROID_COMPILE_SDK: '36'
+  ANDROID_BUILD_TOOLS: '36.0.0'
+  NODE_VERSION: '20'
+  JAVA_VERSION: '17'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Install server production dependencies
+        working-directory: ./server
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --production
+          else
+            npm install --production --ignore-scripts
+          fi
+
+      - name: Prepare Alpine rootfs with Node.js
+        run: |
+          chmod +x scripts/prepare-rootfs.sh
+          bash scripts/prepare-rootfs.sh
+
+      - name: Download PRoot for Android ARM64
+        run: |
+          mkdir -p assets-tmp
+          curl -L -o assets-tmp/proot-arm64 \
+            "https://github.com/termux/proot/releases/download/v5.4.0/proot-aarch64" || \
+          curl -L -o /tmp/proot.deb \
+            "https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.4.0_aarch64.deb" && \
+            dpkg-deb -x /tmp/proot.deb /tmp/proot-extract && \
+            find /tmp/proot-extract -name "proot" -type f -exec cp {} assets-tmp/proot-arm64 \;
+          chmod +x assets-tmp/proot-arm64
+          # Verify it's a valid ARM64 ELF binary
+          file assets-tmp/proot-arm64
+          if ! file assets-tmp/proot-arm64 | grep -q "ELF.*aarch64\|ELF.*ARM"; then
+            echo "ERROR: proot binary is not a valid ARM64 ELF!"
+            exit 1
+          fi
+          ls -lh assets-tmp/proot-arm64
+
+      - name: Package APK assets
+        run: |
+          chmod +x scripts/package-assets.sh
+          bash scripts/package-assets.sh
+
+      - name: Set up Gradle wrapper
+        working-directory: ./android
+        run: |
+          mkdir -p gradle/wrapper
+          cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
+          networkTimeout=10000
+          validateDistributionUrl=true
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          EOF
+          curl -L -o gradle/wrapper/gradle-wrapper.jar \
+            "https://raw.githubusercontent.com/gradle/gradle/v8.5.0/gradle/wrapper/gradle-wrapper.jar"
+
+      - name: Build APK
+        working-directory: ./android
+        run: |
+          echo "sdk.dir=${ANDROID_HOME:-$ANDROID_SDK_ROOT}" > local.properties
+          # Install required SDK components if needed
+          yes | ${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-35" "build-tools;35.0.0" 2>/dev/null || true
+          if [ ! -f gradlew ]; then
+            gradle wrapper --gradle-version 8.5
+          fi
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Sign APK
+        working-directory: ./android
+        run: |
+          APK=$(find app/build/outputs -name "*.apk" | head -1)
+          echo "Found APK: $APK"
+          KEYSTORE="$HOME/.android/debug.keystore"
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$KEYSTORE" ]; then
+            keytool -genkey -v -keystore "$KEYSTORE" \
+              -storepass android -alias androiddebugkey \
+              -keypass android -keyalg RSA -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Debug, OU=Dev, O=WebChat4, C=US"
+          fi
+          cp "$APK" /tmp/app.apk
+          BUILD_TOOLS_DIR="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools/*"
+          ZIPALIGN=$(ls $BUILD_TOOLS_DIR/zipalign 2>/dev/null | head -1)
+          APKSIGNER=$(ls $BUILD_TOOLS_DIR/apksigner 2>/dev/null | head -1)
+          [ -z "$ZIPALIGN" ] && ZIPALIGN="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}/zipalign"
+          [ -z "$APKSIGNER" ] && APKSIGNER="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools/${ANDROID_BUILD_TOOLS}/apksigner"
+          $ZIPALIGN -f -p 4 /tmp/app.apk /tmp/app-aligned.apk
+          $APKSIGNER sign --ks "$KEYSTORE" --ks-pass pass:android \
+            --key-pass pass:android --ks-key-alias androiddebugkey \
+            --out "$APK" /tmp/app-aligned.apk
+          echo "Signed: $APK"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: WebChat4-APK
+          path: android/app/build/outputs/**/*.apk
+          if-no-files-found: error
+          retention-days: 30

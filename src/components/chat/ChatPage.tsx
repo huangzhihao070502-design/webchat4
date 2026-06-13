@@ -1,0 +1,200 @@
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { motion } from 'framer-motion';
+import { Phone, MoreVertical, Play, Pause, File, MapPin, UserPlus, QrCode, X } from 'lucide-react';
+import InputArea from './InputArea';
+
+const API = '';
+
+interface Msg { id: number; text: string; isMine: boolean; time: string; isVoice?: boolean; voiceDuration?: number; voiceUrl?: string; isImage?: boolean; imageData?: string; isFile?: boolean; fileName?: string; isLocation?: boolean; lat?: number; lng?: number }
+
+const s = { wrap: { display:'flex', flexDirection:'column' as const, height:'100%', minHeight:0 }, header: { display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid rgba(234,224,213,0.6)', background:'rgba(255,255,255,0.9)', padding:'12px 16px', backdropFilter:'blur(12px)', flexShrink:0 }, msgs: { flex:1, minHeight:0, overflowY:'auto' as const, padding:'16px' } };
+
+function fmt(t: number) { return new Date(t).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}); }
+function timeNow() { return fmt(Date.now()); }
+
+export default function ChatPage() {
+  const [msgs, setMsgs] = useState<Msg[]>([]);
+  const [userId, setUserId] = useState<string|null>(null);
+  const [connected, setConnected] = useState(false);
+  const [playingId, setPlayingId] = useState<number|null>(null);
+  const [showAddQr, setShowAddQr] = useState(false);
+  const [addQrImg, setAddQrImg] = useState('');
+  const [addQrStatus, setAddQrStatus] = useState('');
+  const endRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement|null>(null);
+  useEffect(() => { endRef.current?.scrollIntoView({behavior:'smooth'}) }, [msgs]);
+
+  // Poll messages for current user
+  useEffect(() => {
+    let lastId = 0;
+    setMsgs([]); // Clear messages on user switch
+    const poll = setInterval(async () => {
+      try {
+        const [sRes, uRes, mRes] = await Promise.all([
+          fetch(`${API}/api/status`), fetch(`${API}/api/users`), fetch(`${API}/api/messages?since=${lastId}&user=${userId||''}`),
+        ]);
+        const sData = await sRes.json(); setConnected(sData.connected);
+        const uData = await uRes.json(); if (uData.current_user) setUserId(uData.current_user); else if (uData.users?.length && !userId) setUserId(uData.users[0]);
+        const mData = await mRes.json();
+        if (mData.messages?.length) { for (const m of mData.messages) if (m.id > lastId) lastId = m.id; setMsgs(prev => { const n = [...prev]; mData.messages.forEach((m: any) => { if (!n.some(x => x.id === m.id)) n.push({ id: m.id, text: m.text, isMine: m.dir === 'out', time: fmt(m.time||Date.now()), isImage: m.media?.type === 'image', isVoice: m.media?.type === 'voice', isFile: m.media?.type === 'file', mediaCacheKey: m.media?.cache_key || '' }); }); return n; }); }
+      } catch {}
+    }, 1500);
+    return () => clearInterval(poll);
+  }, [userId]);
+
+  // Auto-refresh users (for when a new message comes in and creates a context)
+  useEffect(() => {
+    const t = setInterval(async () => {
+      try { const r = await fetch(`${API}/api/users`); const d = await r.json(); if (d.users?.length && !userId) setUserId(d.users[0]); } catch {}
+    }, 3000);
+    return () => clearInterval(t);
+  }, [userId]);
+
+  const addMsg = (m: Msg) => setMsgs(p => [...p, m]);
+
+  const playVoice = useCallback((msg: Msg) => {
+    if (!msg.voiceUrl) return;
+    if (playingId === msg.id && audioRef.current && !audioRef.current.paused) { audioRef.current.pause(); setPlayingId(null); return; }
+    if (audioRef.current) audioRef.current.pause();
+    const a = new Audio(msg.voiceUrl); audioRef.current = a; a.onended = () => setPlayingId(null); a.play().then(() => setPlayingId(msg.id)).catch(() => {});
+  }, [playingId]);
+  useEffect(() => { return () => { audioRef.current?.pause(); }; }, []);
+
+  const handleSendText = useCallback(async (text: string) => {
+    if (!userId) return;
+    try { await fetch(`${API}/api/send-text`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text, to_user_id: userId}) }); } catch {}
+    addMsg({ id:Date.now(), text, isMine:true, time:timeNow() });
+  }, [userId]);
+
+  const toBase64 = async (blob: Blob) => {
+    const buf = await blob.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
+  };
+  const handleSendVoice = async (blob?: Blob) => {
+    if (!blob || !userId) return;
+    try {
+      await fetch(`${API}/api/send-media`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({media_type:'voice', file_data:await toBase64(blob), filename:'voice.webm', to_user_id: userId}) });
+      addMsg({ id:Date.now(), text:`[语音] voice.mp3 (${(blob.size/1024).toFixed(1)}KB)`, isMine:true, time:timeNow(), isFile:true, fileName:'voice.mp3' });
+    } catch {}
+  };
+  const handleSendImage = async (file: File) => {
+    if (!userId) return;
+    try {
+      await fetch(`${API}/api/send-media`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({media_type:'image', file_data:await toBase64(file), filename:file.name, to_user_id: userId}) });
+      const r = new FileReader(); r.onload=()=>addMsg({id:Date.now(),text:'[图片]',isMine:true,time:timeNow(),isImage:true,imageData:r.result as string}); r.readAsDataURL(file);
+    } catch {}
+  };
+  const handleSendFile = async (file: File) => {
+    if (!userId) return;
+    try {
+      await fetch(`${API}/api/send-media`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({media_type:'file', file_data:await toBase64(file), filename:file.name, to_user_id: userId}) });
+      addMsg({id:Date.now(),text:`${file.name} (${(file.size/1024).toFixed(1)}KB)`,isMine:true,time:timeNow(),isFile:true,fileName:file.name});
+    } catch {}
+  };
+  const handleSendLocation = async (lat: number, lng: number) => {
+    if (!userId) return;
+    try {
+      const text = `位置: https://maps.google.com/?q=${lat},${lng}`;
+      await fetch(`${API}/api/send-text`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text, to_user_id: userId}) });
+      addMsg({id:Date.now(),text,isMine:true,time:timeNow(),isLocation:true,lat,lng});
+    } catch {}
+  };
+
+  // Generate add-friend QR
+  const handleAddFriend = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/api/add-friend-qrcode`); const d = await r.json();
+      if (d.success) { setAddQrImg(`data:image/png;base64,${d.qrcode_image}`); setAddQrStatus('waiting'); setShowAddQr(true); }
+    } catch {}
+  }, []);
+
+  // Poll add-friend status
+  useEffect(() => {
+    if (!showAddQr || addQrStatus === 'confirmed') return;
+    const t = setInterval(async () => {
+      try { const r = await fetch(`${API}/api/add-friend-status`); const d = await r.json(); if (d.status === 'confirmed') setAddQrStatus('confirmed'); } catch {}
+    }, 2000);
+    return () => clearInterval(t);
+  }, [showAddQr, addQrStatus]);
+
+  return (
+    <div style={s.wrap}>
+      <div style={s.header}>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <div style={{width:40,height:40,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',color:'white',fontSize:14,fontWeight:500,background:'linear-gradient(135deg,#C89F7E,#B08968)',boxShadow:'0 2px 8px rgba(192,159,126,0.3)'}}>{userId?userId.slice(0,2).toUpperCase():'B'}</div>
+          <div><div style={{fontSize:15,fontWeight:600,color:'#3E2723'}}>{userId?userId.slice(0,8)+'...':'微信 Bot'}</div><div style={{fontSize:11,color:connected?'#10b981':'#8D6E63'}}>{!connected?'未连接':userId?'在线':'等待消息'}</div></div>
+        </div>
+        <div style={{display:'flex',gap:4}}>{[Phone,MoreVertical].map((Icon,i)=>(
+          <button key={i} style={{width:32,height:32,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:12,border:'none',background:'none',cursor:'pointer'}}><Icon size={17} strokeWidth={1.5} color='#8D6E63'/></button>
+        ))}</div>
+      </div>
+      <div style={s.msgs}>
+        {msgs.length === 0 && <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',textAlign:'center',padding:'0 32px'}}>
+          <div style={{width:56,height:56,borderRadius:'50%',background:'rgba(200,159,126,0.12)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16,fontSize:28}}>💬</div>
+          {!connected ? (
+            <><p style={{fontSize:15,fontWeight:500,color:'#3E2723'}}>未连接到微信</p><p style={{marginTop:6,fontSize:13,color:'#8D6E63',lineHeight:1.6}}>请先退出到登录页<br/>扫码连接微信后再使用</p></>
+          ) : userId ? (
+            <p style={{fontSize:13,color:'#8D6E63'}}>暂无消息</p>
+          ) : (
+            <><p style={{fontSize:15,fontWeight:500,color:'#3E2723',marginBottom:8}}>已连接到微信</p>
+            <p style={{fontSize:13,color:'#8D6E63',lineHeight:1.8}}>
+              Bot 已连接，等待消息中...
+              <br/><br/>
+              <span style={{color:'#B08968',fontWeight:500}}>方式一：</span>用好友给你的微信号发一条消息
+              <br/>消息会自动出现在这里
+              <br/><br/>
+              <span style={{color:'#B08968',fontWeight:500}}>方式二：</span>点击下方按钮生成二维码
+              <br/>用微信扫描后即可建立会话
+            </p>
+            <button onClick={handleAddFriend}
+              style={{marginTop:20,display:'flex',alignItems:'center',gap:8,padding:'12px 24px',borderRadius:14,border:'none',background:'linear-gradient(135deg,#C89F7E,#B08968)',color:'white',fontSize:14,fontWeight:500,cursor:'pointer',boxShadow:'0 4px 16px rgba(200,159,126,0.3)'}}>
+              <UserPlus size={18} strokeWidth={1.5}/> 生成添加好友二维码
+            </button>
+          </>
+          )}
+        </div>}
+        {msgs.map((msg, i) => {
+          const mine = msg.isMine; const isPlaying = playingId === msg.id;
+          const showDate = i === 0 || msgs[i-1].time.slice(0,5) !== msg.time.slice(0,5);
+          return (<div key={msg.id}>
+            {showDate && <div style={{display:'flex',justifyContent:'center',marginBottom:8}}><span style={{borderRadius:999,background:'rgba(234,224,213,0.6)',padding:'2px 12px',fontSize:11,color:'#8D6E63'}}>{msg.time}</span></div>}
+            <motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} style={{display:'flex',justifyContent:mine?'flex-end':'flex-start',marginBottom:10}}>
+              <div style={{maxWidth:'75%',borderRadius:16,padding:'10px 16px',fontSize:14,lineHeight:1.5,wordBreak:'break-word',background:mine?'linear-gradient(135deg,#C89F7E,#B08968)':'#EAE0D5',color:mine?'white':'#3E2723',borderBottomRightRadius:mine?4:16,borderBottomLeftRadius:mine?16:4}}>
+                {msg.isImage && (msg.imageData || msg.mediaCacheKey) && <img src={msg.imageData || `/api/media/${msg.mediaCacheKey}`} alt="" style={{maxWidth:'100%',borderRadius:8,marginBottom:4,display:'block'}} loading="lazy"/>}
+                {msg.isVoice ? (<button onClick={()=>playVoice(msg)} disabled={!msg.voiceUrl} style={{display:'flex',alignItems:'center',gap:10,border:'none',background:'none',cursor:msg.voiceUrl?'pointer':'default',padding:0,color:'inherit',width:'100%'}}>
+                  {isPlaying ? <Pause size={16} strokeWidth={1.5} fill={mine?'white':'#C89F7E'}/> : <Play size={16} strokeWidth={1.5} fill={mine?'white':'#C89F7E'}/>}
+                  <span style={{fontSize:13}}>{msg.voiceDuration||3}"</span>
+                </button>) : msg.isLocation ? <div style={{display:'flex',alignItems:'center',gap:6}}><MapPin size={16} strokeWidth={1.5}/><span>{msg.text}</span></div>
+                : msg.isFile ? <div style={{display:'flex',alignItems:'center',gap:6}}><File size={16} strokeWidth={1.5}/><span>{msg.text}</span></div>
+                : msg.text}
+                <div style={{marginTop:2,fontSize:10,textAlign:'right',color:mine?'rgba(255,255,255,0.6)':'rgba(141,110,99,0.6)'}}>{showDate?'':msg.time.slice(0,5)}</div>
+              </div>
+            </motion.div>
+          </div>);
+        })}
+        <div ref={endRef}/>
+      </div>
+      {userId && <InputArea onSendText={handleSendText} onSendVoice={handleSendVoice} onSendImage={handleSendImage} onSendFile={handleSendFile} onSendLocation={handleSendLocation}/>}
+
+      {/* Add friend QR overlay */}
+      {showAddQr && <div style={{position:'fixed',inset:0,zIndex:999,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.3)',backdropFilter:'blur(4px)'}} onClick={()=>setShowAddQr(false)}>
+        <div style={{background:'white',borderRadius:24,padding:'32px 28px',textAlign:'center',boxShadow:'0 20px 60px rgba(0,0,0,0.15)',maxWidth:320}} onClick={e=>e.stopPropagation()}>
+          <button onClick={()=>setShowAddQr(false)} style={{position:'absolute',top:12,right:12,border:'none',background:'none',cursor:'pointer',padding:4}}><X size={18} color='#8D6E63'/></button>
+          <h3 style={{fontSize:16,fontWeight:600,color:'#3E2723',marginBottom:4}}>{addQrStatus==='confirmed'?'已添加':'添加好友'}</h3>
+          <p style={{fontSize:12,color:'#8D6E63',marginBottom:20}}>{addQrStatus==='confirmed'?'好友已添加，可以开始聊天了':'用微信扫描此二维码添加好友'}</p>
+          {addQrStatus==='confirmed' ? (
+            <div style={{width:200,height:200,margin:'0 auto',display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(16,185,129,0.1)',borderRadius:16}}>
+              <span style={{fontSize:48}}>✅</span>
+            </div>
+          ) : (
+            <img src={addQrImg} alt="添加好友" style={{width:200,height:200,margin:'0 auto',display:'block'}} />
+          )}
+          <button onClick={()=>setShowAddQr(false)} style={{marginTop:16,padding:'8px 24px',borderRadius:12,border:'none',background:'#F7F3EE',color:'#8D6E63',fontSize:13,cursor:'pointer'}}>关闭</button>
+        </div>
+      </div>}
+    </div>
+  );
+}
