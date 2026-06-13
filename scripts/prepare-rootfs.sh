@@ -46,7 +46,7 @@ rm -rf "$ROOTFS_DIR"
 mkdir -p "$ROOTFS_DIR"
 
 echo "Installing Alpine base + Node.js..."
-$APK_STATIC --arch aarch64 \
+$APK_STATIC --arch aarch64 --usermode \
     -X "https://dl-cdn.alpinelinux.org/alpine/latest-stable/main" \
     -U --allow-untrusted --root "$ROOTFS_DIR" --initdb \
     add alpine-base nodejs npm
