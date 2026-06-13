@@ -49,7 +49,7 @@ echo "Installing Alpine base + Node.js..."
 $APK_STATIC --arch aarch64 --usermode \
     -X "https://dl-cdn.alpinelinux.org/alpine/latest-stable/main" \
     -U --allow-untrusted --root "$ROOTFS_DIR" --initdb \
-    add alpine-base nodejs npm
+    add alpine-base nodejs
 
 # Verify
 echo "Node.js: $(ls -lh $ROOTFS_DIR/usr/bin/node 2>/dev/null || echo 'NOT FOUND')"
