@@ -758,7 +758,7 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
         } else {
             try { JSONObject(respBody).put("httpCode", respCode) } catch (_: Exception) { JSONObject(mapOf("ret" to -1, "errmsg" to respBody.take(200), "httpCode" to respCode)) }
         }
-    } catch (_: Exception) { android.util.Log.e(TAG, "ilinkPost exception: ${_.message}"); null }
+    } catch (e: Exception) { android.util.Log.e(TAG, "ilinkPost exception: ${e.message}"); null }
 
     private fun httpsPost(urlStr: String, apiKey: String, jsonBody: String): JSONObject? = try {
         val conn = URL(urlStr).openConnection() as HttpsURLConnection
