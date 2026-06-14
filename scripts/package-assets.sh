@@ -53,13 +53,18 @@ zf = zipfile.ZipFile('$ASSETS_DIR/rootfs.zip', 'w', zipfile.ZIP_DEFLATED)
 for root, dirs, files in os.walk('rootfs/'):
     for f in files:
         fp = os.path.join(root, f)
+        if not os.path.exists(fp) and not os.path.islink(fp):
+            continue
         arcname = os.path.relpath(fp, '.')
         zf.write(fp, arcname)
     for d in dirs:
         fp = os.path.join(root, d)
+        if not os.path.exists(fp) and not os.path.islink(fp):
+            continue
         arcname = os.path.relpath(fp, '.') + '/'
         zf.write(fp, arcname)
 zf.close()
+print('rootfs.zip created')
 "
 echo "  rootfs.zip: $(du -sh $ASSETS_DIR/rootfs.zip | cut -f1)"
 
