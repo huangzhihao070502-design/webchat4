@@ -1,42 +1,74 @@
 package com.webchat4.app
 
 import android.os.Bundle
+import android.view.Gravity
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Toast
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
     private var serverManager: ServerManager? = null
     private var webView: WebView? = null
+    private var errorView: TextView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        try {
-            setContentView(R.layout.activity_main)
+        setContentView(R.layout.activity_main)
 
-            webView = findViewById(R.id.webview)
-            setupWebView()
-
-            serverManager = ServerManager(this)
-
-            if (!serverManager!!.isRunning()) {
-                serverManager!!.startServer { success ->
-                    runOnUiThread {
-                        if (success) {
-                            loadWebApp()
-                        } else {
-                            Toast.makeText(this, "服务器启动失败，请查看日志", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                }
-            } else {
-                loadWebApp()
+        webView = findViewById(R.id.webview)
+        errorView = TextView(this).apply {
+            textSize = 12f
+            isScrollbarFadingEnabled = false
+            setTextIsSelectable(true)
+            setPadding(32, 32, 32, 32)
+            gravity = Gravity.START
+            text = "正在启动服务..."
+            (this.parent as? android.view.ViewGroup)?.let { parent ->
+                parent.removeView(this)
             }
-        } catch (e: Exception) {
-            Toast.makeText(this, "启动错误: ${e.message}", Toast.LENGTH_LONG).show()
+            addContentView(this, android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            ))
+            bringToFront()
         }
+        setupWebView()
+
+        // 尝试写一个测试日志
+        try {
+            File(cacheDir, "webchat4_test.log").writeText("test ok")
+        } catch (e: Exception) {
+            showError("无法写入缓存目录: ${e.message}")
+            return
+        }
+
+        serverManager = ServerManager(this)
+        serverManager!!.startServer { success ->
+            runOnUiThread {
+                if (success) {
+                    loadWebApp()
+                } else {
+                    // 读取日志显示在屏幕上
+                    val logText = try {
+                        File(cacheDir, "startup.log").readText()
+                    } catch (e: Exception) {
+                        "无法读取日志: ${e.message}"
+                    }
+                    showError("服务器启动失败\n\n详细日志:\n$logText")
+                }
+            }
+        }
+    }
+
+    private fun showError(msg: String) {
+        errorView?.text = msg
+        errorView?.setTextColor(0xFFCC0000.toInt())
+        errorView?.visibility = android.view.View.VISIBLE
+        webView?.visibility = android.view.View.GONE
+        findViewById<android.view.View>(R.id.splash_layout)?.visibility = android.view.View.GONE
     }
 
     private fun setupWebView() {

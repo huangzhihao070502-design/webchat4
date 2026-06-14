@@ -18,33 +18,43 @@ class ServerManager(private val context: Context) {
 
     private var serverProcess: Process? = null
 
-    // 使用 cacheDir 代替 filesDir（Android 16 更稳定）
-    private val workDir: File = context.cacheDir
-    private val rootfsDir: File = File(workDir, "rootfs")
-    private val prootFile: File = File(workDir, "proot-arm64")
-    private val logFile: File = File(workDir, "startup.log")
+    // 安全获取目录（不为空）
+    private val workDir: File = run {
+        var dir = context.cacheDir
+        if (dir == null || !dir.exists()) dir = context.filesDir
+        if (dir == null || !dir.exists()) dir = File(context.applicationInfo.dataDir, "cache")
+        dir.mkdirs()
+        dir
+    }
+    private val rootfsDir = File(workDir, "rootfs")
+    private val prootFile = File(workDir, "proot-arm64")
+    private val logFile = File(workDir, "startup.log")
 
     init {
-        // 清理旧日志，初始化日志
         try { logFile.delete() } catch (_: Throwable) {}
-        log("=== WebChat4 启动日志 ===")
-        log("workDir: ${workDir.absolutePath}")
-        log("空间: ${workDir.freeSpace / 1024 / 1024} MB 可用")
+        log("=== 启动 ===")
+        log("目录: ${workDir.absolutePath}")
+        log("可用空间: ${workDir.freeSpace / 1024 / 1024} MB")
     }
 
-    private fun log(msg: String) {
-        val line = "[${java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.CHINA).format(java.util.Date())}] $msg"
+    private fun log(msg: String) = writeLog(msg)
+    private fun logError(msg: String, e: Throwable? = null) {
+        val stack = if (e != null) Log.getStackTraceString(e) else ""
+        writeLog("错误: $msg")
+        if (stack.isNotEmpty()) writeLog(stack.take(2000))
+    }
+
+    private fun writeLog(msg: String) {
+        val line = "[${System.currentTimeMillis() % 100000}] $msg"
         Log.i(TAG, line)
         try {
-            FileOutputStream(logFile, true).use { it.write("$line\n".toByteArray()); it.flush() }
+            FileOutputStream(logFile, true).use {
+                it.write("$line\n".toByteArray())
+                it.flush()
+            }
         } catch (e: Throwable) {
-            Log.e(TAG, "写日志失败: ${e.message}")
+            Log.e(TAG, "日志写入失败: ${e.message}")
         }
-    }
-
-    private fun logError(msg: String, e: Throwable? = null) {
-        val stack = if (e != null) "\n${Log.getStackTraceString(e)}" else ""
-        log("错误: $msg$stack")
     }
 
     fun isRunning(): Boolean = serverProcess?.isAlive == true
@@ -52,60 +62,62 @@ class ServerManager(private val context: Context) {
     fun startServer(callback: (Boolean) -> Unit) {
         Thread {
             try {
-                // 步骤1: 解压 rootfs
+                // === 解压 rootfs ===
                 if (!rootfsDir.exists()) {
                     log("解压 rootfs.zip...")
-                    val start = System.currentTimeMillis()
+                    val t = System.currentTimeMillis()
                     extractZip("rootfs.zip", workDir.absolutePath)
-                    log("解压完成 (${System.currentTimeMillis() - start}ms)")
-                } else {
-                    log("rootfs 已存在: ${rootfsDir.absolutePath}")
+                    log("解压完成 (${System.currentTimeMillis() - t}ms)")
                 }
 
                 // 验证 Node.js
                 val nodeFile = File(rootfsDir, "usr/bin/node")
                 if (!nodeFile.exists()) {
-                    logError("未找到 Node.js (${nodeFile.absolutePath})")
-                    log("rootfs 内容: ${rootfsDir.list()?.take(20)?.joinToString(", ") ?: "空"}")
-                    callback(false); return@Thread
+                    logError("Node.js 未找到")
+                    // 列出 rootfs 顶层目录
+                    val listing = rootfsDir.list()?.take(30)?.joinToString(", ") ?: "空目录"
+                    log("rootfs 顶层: $listing")
+                    callback(false)
+                    return@Thread
                 }
-                log("Node.js: ${nodeFile.length()} bytes")
+                log("Node.js: ${nodeFile.length()} 字节")
 
-                // 步骤2: 解压 proot
+                // === 解压 proot ===
                 if (!prootFile.exists()) {
-                    log("解压 proot-arm64...")
-                    copyAsset("proot-arm64", prootFile)
+                    log("解压 proot...")
+                    context.assets.open("proot-arm64").use { input ->
+                        FileOutputStream(prootFile).use { input.copyTo(it) }
+                    }
                     prootFile.setExecutable(true)
+                    log("proot: ${prootFile.length()} 字节")
                 }
+
                 if (!prootFile.canExecute()) {
-                    logError("proot 不可执行")
-                    callback(false); return@Thread
+                    logError("proot 不能执行")
+                    try {
+                        val rt = Runtime.getRuntime()
+                        rt.exec("chmod 0755 ${prootFile.absolutePath}").waitFor()
+                        log("chmod 重试后: ${prootFile.setExecutable(true)}")
+                    } catch (e: Exception) {
+                        logError("chmod 失败", e)
+                    }
                 }
-                log("proot: ${prootFile.length()} bytes")
 
-                // 步骤3: 尝试直接运行 node（不用 PRoot，看能不能跑）
-                log("尝试直接运行 node...")
-                val directTest = try {
-                    val pb = ProcessBuilder("/system/bin/sh", "-c", "echo test123")
-                    val p = pb.start()
-                    val out = p.inputStream.bufferedReader().readText().trim()
-                    p.waitFor()
-                    out
-                } catch (e: Exception) {
-                    logError("shell 测试失败", e)
-                    ""
-                }
-                log("shell 测试: $directTest")
-
-                // 步骤4: 启动 Node.js 服务器（先用 PRoot，不行就换方案）
-                log("通过 PRoot 启动 Node.js...")
-                val pb = ProcessBuilder(
+                // === 启动 Node.js ===
+                log("启动 PRoot + Node.js...")
+                val cmd = arrayOf(
                     prootFile.absolutePath,
                     "-r", rootfsDir.absolutePath,
                     "-b", "/dev",
+                    "-b", "/proc",
+                    "-b", "/sys",
+                    "--kill-on-exit",
                     "-w", "/home/webchat4",
                     "/usr/bin/node", "/home/webchat4/server/server.cjs"
                 )
+                log("命令: ${cmd.joinToString(" ")}")
+
+                val pb = ProcessBuilder(*cmd)
                 pb.environment()["HOME"] = "/home/webchat4"
                 pb.environment()["NODE_ENV"] = "production"
                 pb.directory(rootfsDir)
@@ -113,7 +125,7 @@ class ServerManager(private val context: Context) {
 
                 serverProcess = pb.start()
 
-                // 读取进程输出
+                // 读取输出
                 Thread {
                     try {
                         serverProcess?.inputStream?.bufferedReader()?.use { reader ->
@@ -122,15 +134,22 @@ class ServerManager(private val context: Context) {
                     } catch (_: Exception) {}
                 }.start()
 
-                // 等待服务器启动
-                val started = waitForServer(15000)
-                if (started) {
-                    log("服务器启动成功!")
+                // 等待服务器就绪
+                log("等待端口 $PORT...")
+                if (waitForServer(15000)) {
+                    log("服务器就绪!")
                     callback(true)
                 } else {
                     val alive = serverProcess?.isAlive == true
                     val exitCode = if (!alive) serverProcess?.exitValue() else -1
-                    logError("服务器超时 - 进程存活: $alive, 退出码: $exitCode")
+                    logError("超时 (进程存活: $alive, 退出码: $exitCode)")
+                    if (!alive && exitCode >= 0) {
+                        // 进程已退出，读取错误输出
+                        try {
+                            val err = serverProcess?.inputStream?.bufferedReader()?.readText() ?: ""
+                            log("进程输出:\n${err.take(2000)}")
+                        } catch (_: Exception) {}
+                    }
                     callback(false)
                 }
             } catch (e: Exception) {
@@ -157,8 +176,8 @@ class ServerManager(private val context: Context) {
     }
 
     private fun extractZip(assetName: String, destPath: String) {
-        val fileSize = try { context.assets.open(assetName).available() } catch (_: Exception) { -1 }
-        log("开始解压 $assetName ($fileSize bytes) → $destPath")
+        val assetSize = try { context.assets.open(assetName).available() } catch (_: Exception) { -1 }
+        log("asset $assetName = ${assetSize}bytes")
 
         context.assets.open(assetName).use { input ->
             val zis = ZipInputStream(input)
@@ -171,7 +190,7 @@ class ServerManager(private val context: Context) {
                 if (entry.isDirectory) {
                     outFile.mkdirs()
                 } else {
-                    outFile.parentFile.mkdirs()
+                    outFile.parentFile?.mkdirs()
                     FileOutputStream(outFile).use { fout ->
                         var read: Int
                         while (zis.read(buf).also { read = it } != -1) {
@@ -183,21 +202,13 @@ class ServerManager(private val context: Context) {
                 count++
                 entry = zis.nextEntry
             }
-            log("解压完成: $count 个文件")
-        }
-    }
-
-    private fun copyAsset(assetName: String, destFile: File) {
-        context.assets.open(assetName).use { input ->
-            FileOutputStream(destFile).use { output ->
-                input.copyTo(output)
-            }
+            log("解压了 $count 个文件")
         }
     }
 
     fun stopServer() {
         serverProcess?.destroyForcibly()
         serverProcess = null
-        log("服务已停止")
+        log("已停止")
     }
 }
