@@ -418,12 +418,12 @@ export default function SettingsPage({ onLogout }: Props) {
             <ArrowLeft size={20} strokeWidth={1.5} />
           </button>
           <h1 style={{ fontSize:20, fontWeight:600, color:'#3E2723', flex:1 }}>运行日志</h1>
-          <button onClick={() => { fetch('${API}/api/logs/clear', {method:'POST'}); setLogs([]); }}
-            style={{ padding:'6px 14px', borderRadius:10, border:'none', background:'rgba(239,68,68,0.08)', color:'#ef4444', fontSize:12, fontWeight:500, cursor:'pointer' }}>清空</button>
+          <button onClick={() => { fetch('/api/logs/clear', {method:'POST'}); setLogs([]); }}
+            style={{ padding:'5px 10px', borderRadius:6, border:'none', background:'rgba(239,68,68,0.08)', color:'#ef4444', fontSize:12, cursor:'pointer' }}>清空</button>
           <button onClick={() => { setLogFilter(f => f === 'all' ? 'ERROR' : 'all'); }}
-            style={{ padding:'6px 14px', borderRadius:10, border:'none', background:'rgba(200,159,126,0.12)', color:'#C89F7E', fontSize:12, fontWeight:500, cursor:'pointer' }}>{logFilter === 'all' ? '仅错误' : '全部'}</button>
+            style={{ padding:'5px 10px', borderRadius:6, border:'none', background:'rgba(200,159,126,0.12)', color:'#C89F7E', fontSize:12, cursor:'pointer' }}>{logFilter === 'all' ? '仅错误' : '全部'}</button>
           <button onClick={() => { const t = filtered.map((l:any) => '['+l.time+']['+l.level+']['+l.tag+'] '+l.msg).join('\n'); navigator.clipboard.writeText(t).catch(()=>{}); }}
-            style={{ padding:'6px 14px', borderRadius:10, border:'none', background:'rgba(16,185,129,0.1)', color:'#10b981', fontSize:12, fontWeight:500, cursor:'pointer' }}>📋 复制</button>
+            style={{ padding:'5px 10px', borderRadius:6, border:'none', background:'rgba(16,185,129,0.1)', color:'#10b981', fontSize:12, cursor:'pointer' }}>复制</button>
         </div>
         <div style={{ flex:1, overflow:'auto', padding:'8px 12px', fontFamily:'monospace', fontSize:11, lineHeight:1.6 }}>
           {filtered.length === 0 ? (
