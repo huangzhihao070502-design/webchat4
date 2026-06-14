@@ -55,10 +55,15 @@ zf = zipfile.ZipFile('$ASSETS_DIR/rootfs.zip', 'w', zipfile.ZIP_DEFLATED)
 for root, dirs, files in os.walk('rootfs/'):
     for f in files:
         fp = os.path.join(root, f)
+        if not os.access(fp, os.R_OK):
+            continue
         arcname = os.path.relpath(fp, '.')
         zf.write(fp, arcname)
     for d in dirs[:]:
         fp = os.path.join(root, d)
+        if not os.access(fp, os.R_OK):
+            dirs.remove(d)
+            continue
         arcname = os.path.relpath(fp, '.') + '/'
         zf.write(fp, arcname)
 zf.close()
