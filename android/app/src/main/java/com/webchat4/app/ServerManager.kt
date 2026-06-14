@@ -76,12 +76,27 @@ class ServerManager(private val context: Context) {
                     }
                 }
 
-                // 4. 通过 system linker64 执行
+                // 4. 尝试各种方式执行 Node.js
                 val serverJs = File(serverDir, "server/server.cjs").absolutePath
                 val nodePath = nodeFile.absolutePath
                 val libPath = "${libDir.absolutePath}:/system/lib64:/vendor/lib64"
 
-                val pb = ProcessBuilder("/system/bin/linker64", nodePath, serverJs)
+                // 查找可用的链接器/加载器
+                val linkers = listOf(
+                    "/apex/com.android.runtime/bin/linker64",  // Android 12+
+                    "/system/bin/linker64",                     // 旧版 Android
+                    "/system/bin/linker"                        // 32-bit 后备
+                )
+                val linker = linkers.firstOrNull { File(it).canExecute() }
+
+                val cmd = if (linker != null) {
+                    arrayOf(linker, nodePath, serverJs)
+                } else {
+                    // 没有链接器，尝试直接执行（部分设备允许）
+                    arrayOf(nodePath, serverJs)
+                }
+
+                val pb = ProcessBuilder(*cmd)
                 pb.environment()["NODE_ENV"] = "production"
                 pb.environment()["LD_LIBRARY_PATH"] = libPath
                 pb.directory(File(serverDir, "server"))
