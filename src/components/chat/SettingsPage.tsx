@@ -14,6 +14,12 @@ export default function SettingsPage({ onLogout }: Props) {
   const [users, setUsers] = useState<string[]>([]);
   const [expandedPersona, setExpandedPersona] = useState<string|null>(null);
   const [allSkills, setAllSkills] = useState<any[]>([]);
+  const [logs, setLogs] = useState<any[]>([]);
+  const [logFilter, setLogFilter] = useState<'all'|'ERROR'>('all');
+  const loadLogs = useCallback(async () => {
+    try { const r = await fetch(`${API}/api/logs`); const d = await r.json(); setLogs(Array.isArray(d) ? d : []); } catch {}
+  }, []);
+  useEffect(() => { if (page === 'logs') { loadLogs(); const t = setInterval(loadLogs, 3000); return () => clearInterval(t); } }, [page, loadLogs]);
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [aiCfg, setAiCfg] = useState({ enabled: false, api_url: '', api_key: '', model: '', prompt: '', scheduled_reply: false, active_interval: 60, max_replies: 2, reply_min_chars: 0, reply_max_chars: 0, token_limit: 0 });
   const [aiTestResult, setAiTestResult] = useState<string|null>(null);
@@ -402,13 +408,6 @@ export default function SettingsPage({ onLogout }: Props) {
       </div>
     );
   }
-
-  const [logs, setLogs] = useState<any[]>([]);
-  const [logFilter, setLogFilter] = useState<'all'|'ERROR'>('all');
-  const loadLogs = useCallback(async () => {
-    try { const r = await fetch(`${API}/api/logs`); const d = await r.json(); setLogs(Array.isArray(d) ? d : []); } catch {}
-  }, []);
-  useEffect(() => { if (page === 'logs') { loadLogs(); const t = setInterval(loadLogs, 3000); return () => clearInterval(t); } }, [page, loadLogs]);
 
   if (page === 'logs') {
     const filtered = logFilter === 'all' ? logs : logs.filter((l:any) => l.level === 'ERROR');
