@@ -7,7 +7,7 @@ const API = '';
 
 export default function SettingsPage({ onLogout }: Props) {
   const [email, setEmail] = useState('');
-  const [page, setPage] = useState<'main' | 'account' | 'ai' | 'personas' | 'personaEdit'>('main');
+  const [page, setPage] = useState<'main' | 'account' | 'ai' | 'personas' | 'personaEdit' | 'logs'>('main');
   const [personas, setPersonas] = useState<any[]>([]);
   const [personaMap, setPersonaMap] = useState<Record<string,string>>({});
   const [editingPersona, setEditingPersona] = useState<any>({ name: '', personality: '', style: '', background: '', details: '' });
@@ -403,6 +403,45 @@ export default function SettingsPage({ onLogout }: Props) {
     );
   }
 
+  const [logs, setLogs] = useState<any[]>([]);
+  const [logFilter, setLogFilter] = useState<'all'|'ERROR'>('all');
+  const loadLogs = useCallback(async () => {
+    try { const r = await fetch(`${API}/api/logs`); const d = await r.json(); setLogs(Array.isArray(d) ? d : []); } catch {}
+  }, []);
+  useEffect(() => { if (page === 'logs') { loadLogs(); const t = setInterval(loadLogs, 3000); return () => clearInterval(t); } }, [page, loadLogs]);
+
+  if (page === 'logs') {
+    const filtered = logFilter === 'all' ? logs : logs.filter((l:any) => l.level === 'ERROR');
+    return (
+      <div style={{ display:'flex', flexDirection:'column', height:'100%', background:'#F7F3EE' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12, padding:'16px 16px 8px' }}>
+          <button onClick={() => setPage('main')} style={{ width:32, height:32, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:10, border:'none', background:'none', cursor:'pointer', color:'#8D6E63' }}>
+            <ArrowLeft size={20} strokeWidth={1.5} />
+          </button>
+          <h1 style={{ fontSize:20, fontWeight:600, color:'#3E2723', flex:1 }}>运行日志</h1>
+          <button onClick={() => { fetch(${API}/api/logs/clear, {method:'POST'}); setLogs([]); }}
+            style={{ padding:'6px 14px', borderRadius:10, border:'none', background:'rgba(239,68,68,0.08)', color:'#ef4444', fontSize:12, fontWeight:500, cursor:'pointer' }}>清空</button>
+          <button onClick={() => { setLogFilter(f => f === 'all' ? 'ERROR' : 'all'); }}
+            style={{ padding:'6px 14px', borderRadius:10, border:'none', background:'rgba(200,159,126,0.12)', color:'#C89F7E', fontSize:12, fontWeight:500, cursor:'pointer' }}>{logFilter === 'all' ? '仅错误' : '全部'}</button>
+          <button onClick={() => { const t = filtered.map((l:any) => '['+l.time+']['+l.level+']['+l.tag+'] '+l.msg).join('\n'); navigator.clipboard.writeText(t).catch(()=>{}); }}
+            style={{ padding:'6px 14px', borderRadius:10, border:'none', background:'rgba(16,185,129,0.1)', color:'#10b981', fontSize:12, fontWeight:500, cursor:'pointer' }}>📋 复制</button>
+        </div>
+        <div style={{ flex:1, overflow:'auto', padding:'8px 12px', fontFamily:'monospace', fontSize:11, lineHeight:1.6 }}>
+          {filtered.length === 0 ? (
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'60%', color:'#8D6E63', fontSize:13 }}>暂无日志</div>
+          ) : filtered.map((l:any, i:number) => (
+            <div key={i} style={{ marginBottom:4, padding:'6px 8px', borderRadius:8, background: l.level === 'ERROR' ? 'rgba(239,68,68,0.06)' : l.level === 'WARN' ? 'rgba(245,158,11,0.06)' : 'white', borderLeft: l.level === 'ERROR' ? '3px solid #ef4444' : l.level === 'WARN' ? '3px solid #f59e0b' : '3px solid transparent' }}>
+              <span style={{ color:'#8D6E63' }}>[{l.time}]</span>
+              {l.level !== 'INFO' && <span style={{ color: l.level === 'ERROR' ? '#ef4444' : '#f59e0b', fontWeight:600 }}>[{l.level}]</span>}
+              <span style={{ color:'#C89F7E' }}>[{l.tag}]</span>
+              <span style={{ color:'#3E2723' }}> {l.msg}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', padding:'32px 20px 20px', background:'#F7F3EE' }}>
       <h1 style={{ fontSize:22, fontWeight:600, color:'#3E2723', marginBottom:6 }}>设置</h1>
@@ -433,6 +472,11 @@ export default function SettingsPage({ onLogout }: Props) {
         <div onClick={() => setPage('ai')} style={{ display:'flex', alignItems:'center', gap:14, padding:'14px 16px', background:'white', cursor:'pointer' }}>
           <MessageSquare size={20} strokeWidth={1.5} color="#8D6E63" />
           <span style={{ fontSize:14, fontWeight:500, color:'#3E2723', flex:1 }}>AI 自动回复</span>
+          <ChevronRight size={16} strokeWidth={1.5} color="#8D6E6340" />
+        </div>
+        <div onClick={() => setPage('logs')} style={{ display:'flex', alignItems:'center', gap:14, padding:'14px 16px', background:'white', cursor:'pointer' }}>
+          <AlertTriangle size={20} strokeWidth={1.5} color="#8D6E63" />
+          <span style={{ fontSize:14, fontWeight:500, color:'#3E2723', flex:1 }}>运行日志</span>
           <ChevronRight size={16} strokeWidth={1.5} color="#8D6E6340" />
         </div>
         {[{ icon: Bell, label: '消息通知' }, { icon: Lock, label: '隐私' }, { icon: Sliders, label: '通用' }, { icon: Info, label: '关于' }].map((item,i) => (
