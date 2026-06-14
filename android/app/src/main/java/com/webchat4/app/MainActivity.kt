@@ -6,7 +6,6 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import java.io.File
 
 class MainActivity : AppCompatActivity() {
     private var serverManager: ServerManager? = null
@@ -40,7 +39,8 @@ class MainActivity : AppCompatActivity() {
         }
         webView?.webChromeClient = WebChromeClient()
 
-        statusText?.text = "正在启动 Node.js 服务器..."
+        statusText?.text = "正在启动..."
+        titleText?.text = "WebChat4"
 
         serverManager = ServerManager(this)
         serverManager?.startServer { success ->
@@ -48,9 +48,8 @@ class MainActivity : AppCompatActivity() {
                 if (success) {
                     webView?.loadUrl("http://127.0.0.1:3001")
                 } else {
-                    // 显示错误详情
-                    val log = try { File(filesDir, "status.txt").readText() } catch (_: Exception) { "无日志" }
-                    statusText?.text = "启动失败:\n$log"
+                    val err = serverManager?.lastError ?: "未知错误"
+                    statusText?.text = "启动失败:\n\n$err"
                     statusText?.setTextColor(0xFFCC0000.toInt())
                     titleText?.text = "错误"
                     progressBar?.visibility = android.view.View.GONE
