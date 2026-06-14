@@ -1,6 +1,11 @@
 package com.webchat4.app
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.*
@@ -169,6 +174,32 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
         "json" to "application/json", "png" to "image/png", "jpg" to "image/jpeg", "svg" to "image/svg+xml",
         "ico" to "image/x-icon", "woff2" to "font/woff2", "ttf" to "font/ttf")
 
+    // ── QR 码生成（ZXing） ──
+    private fun generateQrPng(data: String, size: Int = 400): ByteArray? {
+        return try {
+            val matrix = QRCodeWriter().encode(data, BarcodeFormat.QR_CODE, size, size)
+            val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.RGB_565)
+            val canvas = Canvas(bmp)
+            canvas.drawColor(android.graphics.Color.WHITE)
+            val paint = Paint().apply { color = android.graphics.Color.BLACK }
+            val cell = size / matrix.width
+            for (x in 0 until matrix.width) {
+                for (y in 0 until matrix.height) {
+                    if (matrix[x, y]) {
+                        canvas.drawRect((x * cell).toFloat(), (y * cell).toFloat(),
+                            ((x + 1) * cell).toFloat(), ((y + 1) * cell).toFloat(), paint)
+                    }
+                }
+            }
+            val out = ByteArrayOutputStream()
+            bmp.compress(Bitmap.CompressFormat.PNG, 100, out)
+            out.toByteArray()
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "QR gen failed: ${e.message}", e)
+            null
+        }
+    }
+
     private fun serveStatic(path: String, cors: Map<String, String>): Resp {
         try {
             // /dist/XXX → /XXX（前端构建产物中 dist/ 前缀在打包到 assets/www 后不再需要）
@@ -206,7 +237,11 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
 
     private fun apiQrcodeStatus(cors: Map<String, String>): Resp = jsonOk(cors, JSONObject(mapOf("status" to qrStatus, "connected" to (botToken != null), "bot_id" to (botId?:""))))
     private fun apiStatus(cors: Map<String, String>): Resp = jsonOk(cors, JSONObject(mapOf("connected" to (botToken != null), "bot_id" to (botId?:""))))
-    private fun apiQrcodeImage(cors: Map<String, String>): Resp = Resp(200, "OK", cors + mapOf("Content-Type" to "image/svg+xml"), "<svg xmlns='http://www.w3.org/2000/svg' width='280' height='280'><rect fill='white'/><text x='140' y='140' text-anchor='middle' fill='#666' font-size='14'>QR</text></svg>".toByteArray())
+    private fun apiQrcodeImage(cors: Map<String, String>): Resp {
+        val key = qrKey ?: return Resp(404, "Not Found", cors, "No QR key".toByteArray())
+        val png = generateQrPng(key) ?: return Resp(500, "Error", cors, "QR gen failed".toByteArray())
+        return Resp(200, "OK", cors + mapOf("Content-Type" to "image/png", "Content-Length" to png.size.toString()), png)
+    }
 
     private fun apiMessages(params: Map<String, String>, cors: Map<String, String>): Resp {
         val since = params["since"]?.toIntOrNull() ?: 0
@@ -297,8 +332,12 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
         val d=ilinkGet("/ilink/bot/get_bot_qrcode?bot_type=3")
         if(d==null) return jsonOk(cors, JSONObject(mapOf("success" to false)))
         afKey=d.optString("qrcode",""); afStatus="waiting"
+        val b64 = if (afKey != null) {
+            val png = generateQrPng(afKey!!, 400)
+            if (png != null) android.util.Base64.encodeToString(png, android.util.Base64.NO_WRAP) else ""
+        } else ""
         if(afKey!=null) threadPool.execute{ while(afKey!=null&&afStatus!="confirmed"){ try{val r=ilinkGet("/ilink/bot/get_qrcode_status?qrcode=$afKey&iLink-App-ClientVersion=1"); if(r!=null){val st=r.optString("status",""); if(st=="confirmed"){afStatus="confirmed";break}else if(st=="expired"){afStatus="expired";break}} }catch(_:Exception){}; Thread.sleep(2000)} }
-        return jsonOk(cors, JSONObject(mapOf("success" to true)))
+        return jsonOk(cors, JSONObject(mapOf("success" to true, "qrcode_image" to b64, "qrcode_key" to (afKey ?: ""))))
     }
     private fun apiAddFriendStatus(cors: Map<String, String>): Resp = jsonOk(cors, JSONObject(mapOf("status" to afStatus)))
     private fun apiAddFriendPoll(cors: Map<String, String>): Resp = jsonOk(cors, JSONObject(mapOf("status" to afStatus)))
@@ -310,7 +349,27 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
         if(f.exists()) return Resp(200,"OK",cors+mapOf("Content-Type" to "image/jpeg"), f.readBytes())
         return Resp(404,"Not Found",cors, ByteArray(0))
     }
-    private fun apiSendMedia(body: String, cors: Map<String, String>): Resp = jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "not implemented")))
+    private fun apiSendMedia(body: String, cors: Map<String, String>): Resp {
+        return try {
+            val j = JSONObject(body)
+            val mediaType = j.optString("media_type", "image")
+            val fileData = j.optString("file_data", "")
+            val fileName = j.optString("filename", "file")
+            val toUserId = j.optString("to_user_id", "")
+            if (fileData.isEmpty() || toUserId.isEmpty()) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "Missing fields")))
+            // 缓存媒体文件到本地
+            mediaCacheDir.mkdirs()
+            val cacheKey = "media_${Date().time.toString(36)}"
+            val data = try { android.util.Base64.decode(fileData, android.util.Base64.DEFAULT) } catch (_: Exception) { fileData.toByteArray() }
+            val cacheFile = File(mediaCacheDir, "$cacheKey.img")
+            cacheFile.writeBytes(data)
+            // 记录媒体消息
+            messages.add(JSONObject(mapOf("id" to ++msgId, "to" to toUserId, "text" to "[${mediaType}] ${fileName}", "time" to System.currentTimeMillis(), "dir" to "out", "media" to JSONObject(mapOf("type" to mediaType, "file" to fileName, "cache_key" to cacheKey, "size" to data.size)))))
+            jsonOk(cors, JSONObject(mapOf("success" to true, "cache_key" to cacheKey)))
+        } catch (e: Exception) {
+            jsonOk(cors, JSONObject(mapOf("success" to false, "error" to e.message)))
+        }
+    }
 
     private fun ilinkGet(path: String): JSONObject? = try {
         val conn=URL("https://$ILINK_HOST$path").openConnection() as HttpsURLConnection
