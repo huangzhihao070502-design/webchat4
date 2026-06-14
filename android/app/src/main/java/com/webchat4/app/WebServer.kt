@@ -40,6 +40,8 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
     private val processedMsgIds = mutableSetOf<String>()
     private var qrStatus: String = "idle"
     private var qrKey: String? = null
+    // iLink 返回的二维码真实内容（URL），用于生成正确可扫码的二维码
+    private var qrContent: String? = null
 
     companion object {
         private const val ILINK_HOST = "ilinkai.weixin.qq.com"
@@ -231,15 +233,26 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
         val data = ilinkGet("/ilink/bot/get_bot_qrcode?bot_type=3")
         if (data == null) return jsonOk(cors, JSONObject(mapOf("success" to false)))
         qrKey = data.optString("qrcode", ""); qrStatus = "waiting"
+        // 保存 iLink 返回的二维码真实内容（URL），用于生成可扫码的二维码
+        qrContent = data.optString("qrcode_img_content", "").ifEmpty { null }
+        // 如果没有 qrcode_img_content，构造标准的 iLink 扫码 URL
+        if (qrContent == null && qrKey != null) {
+            qrContent = "https://${ILINK_HOST}/ilink/bot/qrcode?qrcode=${qrKey}"
+        }
         if (qrKey != null) startQrPolling()
-        return jsonOk(cors, JSONObject(mapOf("success" to (qrKey != null), "qrcode_key" to (qrKey?:""), "qrcode_img_url" to data.optString("qrcode_img_content",""))))
+        return jsonOk(cors, JSONObject(mapOf("success" to (qrKey != null), "qrcode_key" to (qrKey?:""), "qrcode_img_url" to (qrContent?:""))))
     }
 
     private fun apiQrcodeStatus(cors: Map<String, String>): Resp = jsonOk(cors, JSONObject(mapOf("status" to qrStatus, "connected" to (botToken != null), "bot_id" to (botId?:""))))
     private fun apiStatus(cors: Map<String, String>): Resp = jsonOk(cors, JSONObject(mapOf("connected" to (botToken != null), "bot_id" to (botId?:""))))
     private fun apiQrcodeImage(cors: Map<String, String>): Resp {
-        val key = qrKey ?: return Resp(404, "Not Found", cors, "No QR key".toByteArray())
-        val png = generateQrPng(key) ?: return Resp(500, "Error", cors, "QR gen failed".toByteArray())
+        val content = qrContent ?: return Resp(404, "Not Found", cors, "No QR content".toByteArray())
+        // 如果 iLink 直接返回了 SVG 图片内容，透传
+        if (content.trimStart().startsWith("<svg")) {
+            return Resp(200, "OK", cors + mapOf("Content-Type" to "image/svg+xml"), content.toByteArray())
+        }
+        // 否则生成二维码 PNG（将 URL 编码为二维码）
+        val png = generateQrPng(content) ?: return Resp(500, "Error", cors, "QR gen failed".toByteArray())
         return Resp(200, "OK", cors + mapOf("Content-Type" to "image/png", "Content-Length" to png.size.toString()), png)
     }
 
@@ -322,19 +335,28 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
     } catch(_:Exception){ jsonOk(cors, JSONObject(mapOf("success" to false))) }
 
     private fun apiLogout(cors: Map<String, String>): Resp {
-        botToken=null; botId=null; cursor=""; qrKey=null; qrStatus="idle"
+        botToken=null; botId=null; cursor=""; qrKey=null; qrContent=null; qrStatus="idle"
         contextTokens.clear(); messages.clear(); msgId=0; processedMsgIds.clear(); saveState()
         return jsonOk(cors, JSONObject(mapOf("success" to true)))
     }
 
-    private var afKey:String?=null; private var afStatus="idle"
+    private var afKey:String?=null; private var afContent:String?=null; private var afStatus="idle"
     private fun apiAddFriendQrcode(cors: Map<String, String>): Resp {
         val d=ilinkGet("/ilink/bot/get_bot_qrcode?bot_type=3")
         if(d==null) return jsonOk(cors, JSONObject(mapOf("success" to false)))
         afKey=d.optString("qrcode",""); afStatus="waiting"
-        val b64 = if (afKey != null) {
-            val png = generateQrPng(afKey!!, 400)
-            if (png != null) android.util.Base64.encodeToString(png, android.util.Base64.NO_WRAP) else ""
+        afContent = d.optString("qrcode_img_content", "").ifEmpty { null }
+        if (afContent == null && afKey != null) {
+            afContent = "https://${ILINK_HOST}/ilink/bot/qrcode?qrcode=${afKey}"
+        }
+        val b64 = if (afContent != null) {
+            // SVG 内容直接 base64 编码并标记为 SVG
+            if (afContent!!.trimStart().startsWith("<svg")) {
+                android.util.Base64.encodeToString(afContent!!.toByteArray(), android.util.Base64.NO_WRAP)
+            } else {
+                val png = generateQrPng(afContent!!, 400)
+                if (png != null) android.util.Base64.encodeToString(png, android.util.Base64.NO_WRAP) else ""
+            }
         } else ""
         if(afKey!=null) threadPool.execute{ while(afKey!=null&&afStatus!="confirmed"){ try{val r=ilinkGet("/ilink/bot/get_qrcode_status?qrcode=$afKey&iLink-App-ClientVersion=1"); if(r!=null){val st=r.optString("status",""); if(st=="confirmed"){afStatus="confirmed";break}else if(st=="expired"){afStatus="expired";break}} }catch(_:Exception){}; Thread.sleep(2000)} }
         return jsonOk(cors, JSONObject(mapOf("success" to true, "qrcode_image" to b64, "qrcode_key" to (afKey ?: ""))))
