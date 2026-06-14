@@ -141,7 +141,7 @@ class ServerManager(private val context: Context) {
                     callback(true)
                 } else {
                     val alive = serverProcess?.isAlive == true
-                    val exitCode = if (!alive) serverProcess?.exitValue() else -1
+                    val exitCode = if (!alive) (serverProcess?.exitValue() ?: -1) else -1
                     logError("超时 (进程存活: $alive, 退出码: $exitCode)")
                     if (!alive && exitCode >= 0) {
                         // 进程已退出，读取错误输出
