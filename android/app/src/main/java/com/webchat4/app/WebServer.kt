@@ -454,19 +454,46 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             val j = JSONObject(body); val text = j.optString("text", ""); val uid = j.optString("to_user_id", "")
             if (text.isEmpty() || uid.isEmpty()) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "Missing fields")))
             val ctx = contextTokens[uid] ?: return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "No session")))
-            val textItem = JSONObject(mapOf("type" to 1, "text_item" to JSONObject(mapOf("text" to text))))
             val clientId = "msg-${System.currentTimeMillis()}-${randomHex(3)}"
-            val msgObj = JSONObject(mapOf(
-                "from_user_id" to "", "to_user_id" to uid, "client_id" to clientId,
-                "message_type" to 2, "message_state" to 2, "context_token" to ctx,
-                "item_list" to JSONArray(listOf(textItem))
-            ))
-            val r = ilinkPost("sendmessage", JSONObject(mapOf("msg" to msgObj)), botToken!!)
+            // 逐层用 .put() 构造 JSON，避免 mapOf 混合类型问题
+            val textItem = JSONObject()
+            textItem.put("type", 1)
+            val textItemContent = JSONObject()
+            textItemContent.put("text", text)
+            textItem.put("text_item", textItemContent)
+            val itemList = JSONArray()
+            itemList.put(textItem)
+            val msgObj = JSONObject()
+            msgObj.put("from_user_id", "")
+            msgObj.put("to_user_id", uid)
+            msgObj.put("client_id", clientId)
+            msgObj.put("message_type", 2)
+            msgObj.put("message_state", 2)
+            msgObj.put("context_token", ctx)
+            msgObj.put("item_list", itemList)
+            val msgWrapper = JSONObject()
+            msgWrapper.put("msg", msgObj)
+            val r = ilinkPost("sendmessage", msgWrapper, botToken!!)
             val ok = r?.opt("errcode") == null || r?.optInt("errcode", 0) == 0
-            if (ok && r?.optInt("ret", 0) != -1)
-                messages.add(JSONObject(mapOf("id" to ++msgId, "to" to uid, "text" to text, "time" to System.currentTimeMillis(), "dir" to "out")))
-            return jsonOk(cors, JSONObject(mapOf("success" to ok)))
-        } catch (_: Exception) { return jsonOk(cors, JSONObject(mapOf("success" to false))) }
+            if (ok && r?.optInt("ret", 0) != -1) {
+                val msgEntry = JSONObject()
+                msgEntry.put("id", ++msgId)
+                msgEntry.put("to", uid)
+                msgEntry.put("text", text)
+                msgEntry.put("time", System.currentTimeMillis())
+                msgEntry.put("dir", "out")
+                messages.add(msgEntry)
+            }
+            val resp = JSONObject()
+            resp.put("success", ok)
+            return jsonOk(cors, resp)
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "apiSendText error: ${e.message}", e)
+            val resp = JSONObject()
+            resp.put("success", false)
+            resp.put("error", e.message)
+            return jsonOk(cors, resp)
+        }
     }
 
     private fun apiUsers(cors: Map<String, String>): Resp =
