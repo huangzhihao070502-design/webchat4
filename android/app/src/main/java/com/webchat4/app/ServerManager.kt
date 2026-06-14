@@ -16,14 +16,16 @@ class ServerManager(private val context: Context) {
 
     private var serverProcess: Process? = null
 
+    // Android 16 禁止从 filesDir 执行二进制，用 app 数据根目录
     private val workDir: File by lazy {
-        val d = File(context.filesDir, "webchat4")
+        val d = File(context.applicationInfo.dataDir, "app")
         d.mkdirs()
         d
     }
     private val nodeFile = File(workDir, "node-arm64")
+    private val libDir = File(workDir, "lib")
     private val serverDir = File(workDir, "server")
-    private val statusFile = File(context.filesDir, "status.txt")
+    private val statusFile = File(workDir, "status.txt")
 
     private fun saveStatus(msg: String) {
         try { statusFile.writeText(msg) } catch (_: Throwable) {}
@@ -73,13 +75,35 @@ class ServerManager(private val context: Context) {
                     saveStatus("服务端代码 OK")
                 }
 
-                // 3. 启动静态编译的 Node.js 服务器
+                // 3. 提取 Termux 依赖库
+                if (!libDir.exists()) {
+                    try {
+                        val libAssets = context.assets.list("lib")
+                        if (libAssets != null && libAssets.isNotEmpty()) {
+                            libDir.mkdirs()
+                            for (fn in libAssets) {
+                                try {
+                                    context.assets.open("lib/$fn").use { src ->
+                                        FileOutputStream(File(libDir, fn)).use { src.copyTo(it) }
+                                    }
+                                } catch (_: Exception) {}
+                            }
+                            saveStatus("依赖库: ${libAssets.size} 个")
+                        }
+                    } catch (_: Exception) {}
+                }
+
+                // 4. 通过系统 linker64 执行（Android 16 限制解决）
                 saveStatus("启动服务器...")
                 val serverJs = File(serverDir, "server/server.cjs").absolutePath
                 val nodePath = nodeFile.absolutePath
 
-                val pb = ProcessBuilder(nodePath, serverJs)
+                // 通过系统 linker64 执行（绕过 Android noexec 限制）
+                val libPath = "${libDir.absolutePath}:/system/lib64:/vendor/lib64"
+                val cmd = arrayOf("/system/bin/linker64", nodePath, serverJs)
+                val pb = ProcessBuilder(*cmd)
                 pb.environment()["NODE_ENV"] = "production"
+                pb.environment()["LD_LIBRARY_PATH"] = libPath
                 pb.directory(File(serverDir, "server"))
                 pb.redirectErrorStream(true)
 

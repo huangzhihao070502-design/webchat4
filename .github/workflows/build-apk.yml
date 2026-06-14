@@ -53,22 +53,7 @@ jobs:
             npm install --production --ignore-scripts
           fi
 
-      - name: Download static Node.js for ARM64 (musl, no deps needed)
-        run: |
-          mkdir -p assets-tmp
-          curl -L -o /tmp/node.tar.xz \
-            "https://unofficial-builds.nodejs.org/download/release/v20.20.2/node-v20.20.2-linux-arm64-musl.tar.xz"
-          tar -xJf /tmp/node.tar.xz -C /tmp/
-          cp /tmp/node-v20.20.2-linux-arm64-musl/bin/node assets-tmp/node-arm64
-          chmod +x assets-tmp/node-arm64
-          file assets-tmp/node-arm64
-          if ! file assets-tmp/node-arm64 | grep -q "ELF.*aarch64\|ELF.*ARM"; then
-            echo "ERROR: not a valid ARM64 ELF!"
-            exit 1
-          fi
-          ls -lh assets-tmp/node-arm64
-
-      - name: Package APK assets
+      - name: Package APK assets (node + libs + server)
         run: |
           chmod +x scripts/package-assets.sh
           bash scripts/package-assets.sh
