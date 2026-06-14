@@ -362,16 +362,16 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
 
     private fun uploadMedia(fileBuf: ByteArray, filename: String, mediaType: Int, toUserId: String): JSONObject? {
         return try {
-            android.util.Log.i(TAG, "[UPLOAD] Starting: $filename type=$mediaType size=${fileBuf.length}")
+            android.util.Log.i(TAG, "[UPLOAD] Starting: $filename type=$mediaType size=${fileBuf.size}")
             val aesKeyHex = randomHex(16)
             val encrypted = aesEcbEncrypt(fileBuf, aesKeyHex)
             val filekey = randomHex(16)
             val rawMd5 = md5Hex(fileBuf)
-            val body = JSONObject(mapOf(
-                "filekey" to filekey, "media_type" to mediaType, "to_user_id" to toUserId,
-                "rawsize" to fileBuf.length, "rawfilemd5" to rawMd5,
-                "filesize" to encrypted.size, "no_need_thumb" to true, "aeskey" to aesKeyHex
-            ))
+            val body = JSONObject()
+            body.put("filekey", filekey); body.put("media_type", mediaType)
+            body.put("to_user_id", toUserId); body.put("rawsize", fileBuf.size)
+            body.put("rawfilemd5", rawMd5); body.put("filesize", encrypted.size)
+            body.put("no_need_thumb", true); body.put("aeskey", aesKeyHex)
             val result = ilinkPost("getuploadurl", body, botToken ?: "") ?: return null
             if (result.optInt("ret", 0) == -1 || result.has("errcode")) {
                 android.util.Log.e(TAG, "[UPLOAD] getuploadurl failed: ${result.optString("errmsg","")}")
@@ -391,12 +391,16 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             if (cdnRespCode != 200) return null
             val encryptedParam = cdnConn.getHeaderField("x-encrypted-param") ?: return null
             val aesKeyB64 = android.util.Base64.encodeToString(aesKeyHex.toByteArray(), android.util.Base64.NO_WRAP)
-            JSONObject(mapOf(
-                "filekey" to filekey,
-                "media" to JSONObject(mapOf("encrypt_query_param" to encryptedParam, "aes_key" to aesKeyB64, "encrypt_type" to 1)),
-                "aes_key_hex" to aesKeyHex, "raw_size" to fileBuf.length,
-                "encrypted_size" to encrypted.size, "md5" to rawMd5, "filename" to filename
-            ))
+            val mediaObj = JSONObject()
+            mediaObj.put("encrypt_query_param", encryptedParam)
+            mediaObj.put("aes_key", aesKeyB64)
+            mediaObj.put("encrypt_type", 1)
+            val result = JSONObject()
+            result.put("filekey", filekey); result.put("media", mediaObj)
+            result.put("aes_key_hex", aesKeyHex); result.put("raw_size", fileBuf.size)
+            result.put("encrypted_size", encrypted.size); result.put("md5", rawMd5)
+            result.put("filename", filename)
+            result
         } catch (e: Exception) { android.util.Log.e(TAG, "[UPLOAD] Error: ${e.message}"); null }
     }
 
