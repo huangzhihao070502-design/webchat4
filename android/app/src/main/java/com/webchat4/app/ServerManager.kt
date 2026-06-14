@@ -18,23 +18,32 @@ class ServerManager(private val context: Context) {
 
     private var serverProcess: Process? = null
 
-    // 安全获取目录（不为空）
-    private val workDir: File = run {
+    // 安全获取可用目录
+    private val workDir: File = try {
         var dir = context.cacheDir
         if (dir == null || !dir.exists()) dir = context.filesDir
-        if (dir == null || !dir.exists()) dir = File(context.applicationInfo.dataDir, "cache")
-        dir.mkdirs()
-        dir
+        if (dir == null || !dir.exists()) {
+            val dataDir = context.applicationInfo?.dataDir
+            if (dataDir != null) File(dataDir, "cache") else null
+        }
+        if (dir == null) {
+            dir = File("/data/data/${context.packageName}/cache")
+        }
+        dir?.apply { if (!exists()) mkdirs() }
+        dir ?: File(".")
+    } catch (e: Throwable) {
+        File(".")
     }
     private val rootfsDir = File(workDir, "rootfs")
     private val prootFile = File(workDir, "proot-arm64")
     private val logFile = File(workDir, "startup.log")
 
     init {
-        try { logFile.delete() } catch (_: Throwable) {}
-        log("=== 启动 ===")
-        log("目录: ${workDir.absolutePath}")
-        log("可用空间: ${workDir.freeSpace / 1024 / 1024} MB")
+        try {
+            logFile.parentFile?.mkdirs()
+            logFile.delete()
+        } catch (_: Throwable) {}
+        // 不要在 init 中写日志，防止构造时崩溃
     }
 
     private fun log(msg: String) = writeLog(msg)

@@ -8,8 +8,10 @@
         android:layout_height="match_parent"
         android:gravity="center"
         android:orientation="vertical"
+        android:padding="24dp"
         android:background="#F5F0EB">
         <TextView
+            android:id="@+id/title_text"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="WebChat4"
@@ -18,16 +20,19 @@
             android:fontFamily="sans-serif-light"
             android:layout_marginBottom="16dp" />
         <ProgressBar
+            android:id="@+id/progress_bar"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:indeterminate="true" />
         <TextView
-            android:layout_width="wrap_content"
+            android:id="@+id/status_text"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="正在启动服务..."
             android:textSize="14sp"
             android:textColor="#8A8A9A"
-            android:layout_marginTop="16dp" />
+            android:layout_marginTop="16dp"
+            android:gravity="center" />
     </LinearLayout>
     <WebView
         android:id="@+id/webview"
