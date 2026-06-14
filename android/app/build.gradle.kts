@@ -34,7 +34,7 @@ android {
     }
 
     aaptOptions {
-        noCompress("gz", "tar", "so")
+        noCompress("zip", "so")
     }
 }
 

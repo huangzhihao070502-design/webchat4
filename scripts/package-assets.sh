@@ -44,13 +44,24 @@ if [ -f "$PROJECT_DIR/package.json" ]; then
     cp "$PROJECT_DIR/package.json" "$WEBCHAT4_DEST/"
 fi
 
-# Repackage rootfs
-echo "Creating rootfs.tar.gz..."
+# Repackage rootfs as ZIP (Java原生支持，无需外部命令)
+echo "Creating rootfs.zip..."
 cd "$PROJECT_DIR"
-tar -czf "$ASSETS_DIR/rootfs.tar.gz" \
-    --owner=0 --group=0 \
-    --ignore-failed-read \
-    rootfs/
+python3 -c "
+import zipfile, os
+zf = zipfile.ZipFile('$ASSETS_DIR/rootfs.zip', 'w', zipfile.ZIP_DEFLATED)
+for root, dirs, files in os.walk('rootfs/'):
+    for f in files:
+        fp = os.path.join(root, f)
+        arcname = os.path.relpath(fp, '.')
+        zf.write(fp, arcname)
+    for d in dirs:
+        fp = os.path.join(root, d)
+        arcname = os.path.relpath(fp, '.') + '/'
+        zf.write(fp, arcname)
+zf.close()
+"
+echo "  rootfs.zip: $(du -sh $ASSETS_DIR/rootfs.zip | cut -f1)"
 
 # 2. Copy proot binary
 echo "Packaging proot..."
