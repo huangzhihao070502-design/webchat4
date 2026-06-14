@@ -773,7 +773,9 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
             // X-WECHAT-UIN 必须为正数（匹配 JS: Math.floor(Math.random() * 0xFFFFFFFF)）
             val uin = (Random().nextInt(Int.MAX_VALUE - 1) + 1).toString()
             conn.setRequestProperty("X-WECHAT-UIN", android.util.Base64.encodeToString(uin.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP))
-            conn.outputStream.write(data.toAsciiJsonBytes())
+            val requestBytes = data.toAsciiJsonBytes()
+            conn.setFixedLengthStreamingMode(requestBytes.size)
+            conn.outputStream.write(requestBytes)
             val respCode = conn.responseCode
             val respBody = if (respCode in 200..299) {
                 conn.inputStream.readBytes().decodeToString()
