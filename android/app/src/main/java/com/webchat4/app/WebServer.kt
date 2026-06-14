@@ -474,8 +474,8 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             val msgWrapper = JSONObject()
             msgWrapper.put("msg", msgObj)
             val r = ilinkPost("sendmessage", msgWrapper, botToken!!)
-            val ok = r?.opt("errcode") == null || r?.optInt("errcode", 0) == 0
-            if (ok && r?.optInt("ret", 0) != -1) {
+            val ok = r != null && r.optInt("ret", 0) != -1 && (r.opt("errcode") == null || r.optInt("errcode", 0) == 0)
+            if (ok) {
                 val msgEntry = JSONObject()
                 msgEntry.put("id", ++msgId)
                 msgEntry.put("to", uid)
@@ -699,8 +699,8 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
                 "item_list" to JSONArray(listOf(item))
             ))
             val result = ilinkPost("sendmessage", JSONObject(mapOf("msg" to msgObj)), botToken!!)
-            val ok = result?.opt("errcode") == null || result?.optInt("errcode", 0) == 0
-            if (ok && result?.optInt("ret", 0) != -1) {
+            val ok = result != null && result.optInt("ret", 0) != -1 && (result.opt("errcode") == null || result.optInt("errcode", 0) == 0)
+            if (ok) {
                 messages.add(JSONObject(mapOf("id" to ++msgId, "to" to toUserId, "text" to "[${mediaType}] ${finalFilename}",
                     "time" to System.currentTimeMillis(), "dir" to "out")))
             }
@@ -745,9 +745,20 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
         conn.setRequestProperty("Authorization", "Bearer $token")
         conn.setRequestProperty("X-WECHAT-UIN", android.util.Base64.encodeToString(Random().nextInt().toString().toByteArray(), android.util.Base64.NO_WRAP))
         conn.outputStream.write(data.toByteArray())
-        val resp = conn.inputStream.readBytes().decodeToString()
-        if (resp.trim().isEmpty() || resp.trim() == "{}") JSONObject(mapOf("ret" to 0)) else JSONObject(resp)
-    } catch (_: Exception) { null }
+        // 读取响应（支持 HTTP 错误码）
+        val respCode = conn.responseCode
+        val respBody = if (respCode in 200..299) {
+            conn.inputStream.readBytes().decodeToString()
+        } else {
+            try { conn.errorStream?.readBytes()?.decodeToString() ?: "HTTP $respCode" } catch (_: Exception) { "HTTP $respCode" }
+        }
+        if (respBody.trim().isEmpty() || respBody.trim() == "{}") {
+            if (respCode in 200..299) JSONObject(mapOf("ret" to 0))
+            else JSONObject(mapOf("ret" to -1, "errmsg" to "HTTP $respCode", "httpCode" to respCode))
+        } else {
+            try { JSONObject(respBody).put("httpCode", respCode) } catch (_: Exception) { JSONObject(mapOf("ret" to -1, "errmsg" to respBody.take(200), "httpCode" to respCode)) }
+        }
+    } catch (_: Exception) { android.util.Log.e(TAG, "ilinkPost exception: ${_.message}"); null }
 
     private fun httpsPost(urlStr: String, apiKey: String, jsonBody: String): JSONObject? = try {
         val conn = URL(urlStr).openConnection() as HttpsURLConnection
