@@ -22,6 +22,7 @@ class ServerManager(private val context: Context) {
         d
     }
     private val nodeFile = File(workDir, "node-arm64")
+    private val libDir = File(workDir, "lib")
     private val serverDir = File(workDir, "server")
     private val statusFile = File(context.filesDir, "status.txt")
 
@@ -73,13 +74,41 @@ class ServerManager(private val context: Context) {
                     saveStatus("服务端代码 OK")
                 }
 
-                // 3. 直接启动 Node.js 服务器
+                // 3. 提取依赖库
+                try {
+                    val libFiles = context.assets.list("lib")
+                    if (libFiles != null && libFiles.isNotEmpty()) {
+                        libDir.mkdirs()
+                        for (fn in libFiles) {
+                            try {
+                                context.assets.open("lib/$fn").use { src ->
+                                    FileOutputStream(File(libDir, fn)).use { src.copyTo(it) }
+                                }
+                            } catch (_: Exception) {}
+                        }
+                        saveStatus("依赖库: ${libFiles.size} 个")
+                    }
+                } catch (_: Exception) { saveStatus("无额外依赖库") }
+
+                // 4. 启动 Node.js 服务器
                 saveStatus("启动服务器...")
                 val serverJs = File(serverDir, "server/server.cjs").absolutePath
                 val nodePath = nodeFile.absolutePath
 
-                val pb = ProcessBuilder(nodePath, serverJs)
+                // 用系统 linker64 执行，并指定库路径
+                val linker = if (File("/system/bin/linker64").exists()) "/system/bin/linker64"
+                            else if (File("/system/bin/linker").exists()) "/system/bin/linker"
+                            else null
+
+                val cmd = if (linker != null) {
+                    arrayOf(linker, nodePath, serverJs)
+                } else {
+                    arrayOf(nodePath, serverJs)
+                }
+
+                val pb = ProcessBuilder(*cmd)
                 pb.environment()["NODE_ENV"] = "production"
+                pb.environment()["LD_LIBRARY_PATH"] = "${libDir.absolutePath}:/system/lib64:/vendor/lib64"
                 pb.directory(File(serverDir, "server"))
                 pb.redirectErrorStream(true)
 
