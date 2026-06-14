@@ -40,15 +40,15 @@ class MainActivity : AppCompatActivity() {
         serverManager = ServerManager(this)
         serverManager?.startServer { success ->
             runOnUiThread {
-                splash?.visibility = android.view.View.GONE
                 if (success) {
-                    titleText.text = "WebChat4"
+                    splash?.visibility = android.view.View.GONE
+                    webView.visibility = android.view.View.VISIBLE
                     webView.loadUrl("http://127.0.0.1:3001")
                 } else {
-                    val err = serverManager?.lastError ?: "未知错误"
-                    titleText.text = "启动失败"
-                    statusText.text = err
-                    statusText.setTextColor(0xFFCC0000.toInt())
+                    findViewById<android.widget.ProgressBar>(R.id.progress_bar)?.visibility = android.view.View.GONE
+                    titleText?.text = "启动失败"
+                    statusText?.text = serverManager?.lastError ?: "未知错误"
+                    statusText?.setTextColor(0xFFCC0000.toInt())
                 }
             }
         }
