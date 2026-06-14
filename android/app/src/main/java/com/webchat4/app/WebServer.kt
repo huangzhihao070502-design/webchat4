@@ -171,9 +171,13 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
 
     private fun serveStatic(path: String, cors: Map<String, String>): Resp {
         try {
-            val assetPath = if (path == "/") "www/index.html" else "www${path}"
-            val ext = path.substringAfterLast('.', "").lowercase()
-            val mime = MIME[ext] ?: "application/octet-stream"
+            // /dist/XXX → /XXX（前端构建产物中 dist/ 前缀在打包到 assets/www 后不再需要）
+            val cleanPath = if (path.startsWith("/dist/")) path.removePrefix("/dist") else path
+            val assetPath = if (cleanPath == "/") "www/index.html" else "www${cleanPath}"
+            val ext = cleanPath.substringAfterLast('.', "").lowercase()
+            // 根路径 / 或 .html 后缀 → text/html，避免被当作文件下载
+            val mime = if (cleanPath == "/" || ext == "html") "text/html"
+                       else MIME[ext] ?: "application/octet-stream"
             val data = context.assets.open(assetPath).use { it.readBytes() }
             return Resp(200, "OK", cors + mapOf("Content-Type" to mime, "Content-Length" to data.size.toString()), data)
         } catch (_: Exception) {
