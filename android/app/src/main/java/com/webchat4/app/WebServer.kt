@@ -746,31 +746,38 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
         if (resp.trim().isEmpty() || resp.trim() == "{}") JSONObject() else JSONObject(resp)
     } catch (_: Exception) { null }
 
-    private fun ilinkPost(endpoint: String, body: JSONObject, token: String): JSONObject? = try {
-        body.put("base_info", JSONObject(mapOf("channel_version" to "1.0.3")))
-        val data = body.toString()
-        val url = URL("https://$ILINK_HOST/ilink/bot/$endpoint")
-        val conn = url.openConnection() as HttpsURLConnection
-        conn.doOutput = true; conn.connectTimeout = 25000; conn.readTimeout = 25000
-        conn.setRequestProperty("Content-Type", "application/json")
-        conn.setRequestProperty("AuthorizationType", "ilink_bot_token")
-        conn.setRequestProperty("Authorization", "Bearer $token")
-        conn.setRequestProperty("X-WECHAT-UIN", android.util.Base64.encodeToString(Random().nextInt().toString().toByteArray(), android.util.Base64.NO_WRAP))
-        conn.outputStream.write(data.toByteArray())
-        // 读取响应（支持 HTTP 错误码）
-        val respCode = conn.responseCode
-        val respBody = if (respCode in 200..299) {
-            conn.inputStream.readBytes().decodeToString()
-        } else {
-            try { conn.errorStream?.readBytes()?.decodeToString() ?: "HTTP $respCode" } catch (_: Exception) { "HTTP $respCode" }
-        }
-        if (respBody.trim().isEmpty() || respBody.trim() == "{}") {
-            if (respCode in 200..299) JSONObject(mapOf("ret" to 0))
-            else JSONObject(mapOf("ret" to -1, "errmsg" to "HTTP $respCode", "httpCode" to respCode))
-        } else {
-            try { JSONObject(respBody).put("httpCode", respCode) } catch (_: Exception) { JSONObject(mapOf("ret" to -1, "errmsg" to respBody.take(200), "httpCode" to respCode)) }
-        }
-    } catch (e: Exception) { android.util.Log.e(TAG, "ilinkPost exception: ${e.message}"); null }
+    private fun ilinkPost(endpoint: String, body: JSONObject, token: String): JSONObject? {
+        var conn: HttpsURLConnection? = null
+        return try {
+            body.put("base_info", JSONObject(mapOf("channel_version" to "1.0.3")))
+            val data = body.toString()
+            val url = URL("https://$ILINK_HOST/ilink/bot/$endpoint")
+            conn = url.openConnection() as HttpsURLConnection
+            conn.doOutput = true; conn.connectTimeout = 25000; conn.readTimeout = 25000
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.setRequestProperty("AuthorizationType", "ilink_bot_token")
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            // 匹配 server.cjs agent:false — 禁用连接复用，避免 socket hang up
+            conn.setRequestProperty("Connection", "close")
+            // X-WECHAT-UIN 必须为正数（匹配 JS: Math.floor(Math.random() * 0xFFFFFFFF)）
+            val uin = (Random().nextInt(Int.MAX_VALUE - 1) + 1).toString()
+            conn.setRequestProperty("X-WECHAT-UIN", android.util.Base64.encodeToString(uin.toByteArray(), android.util.Base64.NO_WRAP))
+            conn.outputStream.write(data.toByteArray())
+            val respCode = conn.responseCode
+            val respBody = if (respCode in 200..299) {
+                conn.inputStream.readBytes().decodeToString()
+            } else {
+                try { conn.errorStream?.readBytes()?.decodeToString() ?: "HTTP $respCode" } catch (_: Exception) { "HTTP $respCode" }
+            }
+            if (respBody.trim().isEmpty() || respBody.trim() == "{}") {
+                if (respCode in 200..299) JSONObject(mapOf("ret" to 0))
+                else JSONObject(mapOf("ret" to -1, "errmsg" to "HTTP $respCode", "httpCode" to respCode))
+            } else {
+                try { JSONObject(respBody).put("httpCode", respCode) } catch (_: Exception) { JSONObject(mapOf("ret" to -1, "errmsg" to respBody.take(200), "httpCode" to respCode)) }
+            }
+        } catch (e: Exception) { android.util.Log.e(TAG, "ilinkPost exception: ${e.message}"); null }
+        finally { try { conn?.disconnect() } catch (_: Exception) {} }
+    }
 
     private fun httpsPost(urlStr: String, apiKey: String, jsonBody: String): JSONObject? = try {
         val conn = URL(urlStr).openConnection() as HttpsURLConnection
@@ -882,6 +889,9 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
                     }
                     if (item.has("image_item")) {
                         val imgItem = item.optJSONObject("image_item")
+                        // 调试日志：记录 image_item.media 的实际格式
+                        val rawMedia = imgItem?.opt("media")
+                        if (rawMedia != null) android.util.Log.i(TAG, "[IMG] media type=${rawMedia.javaClass.simpleName} value=${rawMedia.toString().take(100)}")
                         val (eqp, aesKey) = extractMediaFields(imgItem?.optJSONObject("media"), imgItem?.optString("media", null))
                         val cdn = JSONObject()
                         cdn.put("encrypt_query_param", eqp)
