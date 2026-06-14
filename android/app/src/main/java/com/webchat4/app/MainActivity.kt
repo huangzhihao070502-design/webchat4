@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
@@ -15,6 +16,8 @@ class MainActivity : AppCompatActivity() {
 
         val webView = findViewById<WebView>(R.id.webview)
         val splash = findViewById<android.view.View>(R.id.splash_layout)
+        val statusText = findViewById<TextView>(R.id.status_text)
+        val titleText = findViewById<TextView>(R.id.title_text)
 
         webView.settings.apply {
             javaScriptEnabled = true
@@ -31,16 +34,21 @@ class MainActivity : AppCompatActivity() {
         }
         webView.webChromeClient = WebChromeClient()
 
+        titleText.text = "启动中..."
+        statusText.text = "正在初始化..."
+
         serverManager = ServerManager(this)
         serverManager?.startServer { success ->
             runOnUiThread {
+                splash?.visibility = android.view.View.GONE
                 if (success) {
+                    titleText.text = "WebChat4"
                     webView.loadUrl("http://127.0.0.1:3001")
                 } else {
-                    findViewById<android.widget.TextView>(R.id.status_text)?.let {
-                        it.text = "启动失败: 无法启动HTTP服务器"
-                        it.setTextColor(0xFFCC0000.toInt())
-                    }
+                    val err = serverManager?.lastError ?: "未知错误"
+                    titleText.text = "启动失败"
+                    statusText.text = err
+                    statusText.setTextColor(0xFFCC0000.toInt())
                 }
             }
         }

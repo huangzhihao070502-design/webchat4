@@ -43,18 +43,20 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
 
     fun isRunning(): Boolean = running
 
-    fun start(): Boolean {
+    fun start(): String {
         return try {
             extractWww()
             loadState()
             running = true
-            serverSocket = ServerSocket(port, 50)
+            serverSocket = java.net.ServerSocket()
+            serverSocket!!.bind(java.net.InetSocketAddress("127.0.0.1", port), 50)
             threadPool.execute { acceptLoop() }
             if (botToken != null) threadPool.execute { pollMessages() }
-            true
+            ""
         } catch (e: Exception) {
-            android.util.Log.e(TAG, "Start failed", e)
-            false
+            val msg = "${e::class.simpleName}: ${e.message}"
+            android.util.Log.e(TAG, "Start failed: $msg", e)
+            msg
         }
     }
 
