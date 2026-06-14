@@ -47,9 +47,24 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
         return try {
             extractWww()
             loadState()
+            // 端口回退：尝试 port ~ port+4，解决 EADDRINUSE
+            var lastError: Exception? = null
+            for (attempt in 0 until 5) {
+                val tryPort = port + attempt
+                try {
+                    val ss = java.net.ServerSocket()
+                    ss.setReuseAddress(true)
+                    ss.bind(java.net.InetSocketAddress("127.0.0.1", tryPort), 50)
+                    serverSocket = ss
+                    lastError = null
+                    break
+                } catch (e: Exception) {
+                    lastError = e
+                    android.util.Log.w(TAG, "Port $tryPort busy: ${e.message}")
+                }
+            }
+            if (lastError != null) throw lastError!!
             running = true
-            serverSocket = java.net.ServerSocket()
-            serverSocket!!.bind(java.net.InetSocketAddress("127.0.0.1", port), 50)
             threadPool.execute { acceptLoop() }
             if (botToken != null) threadPool.execute { pollMessages() }
             ""

@@ -54,6 +54,22 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        findViewById<WebView>(R.id.webview)?.onPause()
+    }
+
+    override fun onRestart() {
+        super.onRestart()
+        findViewById<WebView>(R.id.webview)?.onResume()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        serverManager?.stopServer()
+        serverManager = null
+    }
+
     override fun onBackPressed() {
         val w = findViewById<WebView>(R.id.webview)
         if (w.canGoBack()) w.goBack() else super.onBackPressed()
