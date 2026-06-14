@@ -88,7 +88,7 @@ export default function InputArea({ onSendText, onSendVoice, onSendImage, onSend
   return (<>
     <input ref={imgInput} type="file" accept="image/*" onChange={handleImagePick} style={{display:'none'}} />
     <input ref={fileInput} type="file" onChange={handleFilePick} style={{display:'none'}} />
-    <input ref={cameraInput} type="file" accept="image/*" capture="environment" onChange={handleCameraCapture} style={{display:'none'}} />
+    <input ref={cameraInput} type="file" accept="image/*" capture="camera" onChange={handleCameraCapture} style={{display:'none'}} />
 
     <div style={{borderTop:'1px solid rgba(234,224,213,0.6)',background:'white',padding:'10px 12px calc(env(safe-area-inset-bottom,8px))'}}>
       <div style={{display:'flex',alignItems:'flex-end',gap:8}}>
