@@ -86,23 +86,22 @@ class MainActivity : AppCompatActivity() {
 
             // 麦克风/摄像头权限
             override fun onPermissionRequest(request: PermissionRequest?) {
-                request?.let {
-                    val needed = it.resources.filter { r ->
+                request?.let { req ->
+                    for (r in req.resources) {
                         when (r) {
-                            PermissionRequest.RESOURCE_AUDIO_CAPTURE ->
-                                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO)
-                                        != PackageManager.PERMISSION_GRANTED
-                            PermissionRequest.RESOURCE_VIDEO_CAPTURE ->
-                                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA)
-                                        != PackageManager.PERMISSION_GRANTED
-                            else -> false
+                            PermissionRequest.RESOURCE_AUDIO_CAPTURE -> {
+                                if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                                    ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_PERMISSIONS)
+                                }
+                            }
+                            PermissionRequest.RESOURCE_VIDEO_CAPTURE -> {
+                                if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                                    ActivityCompat.requestPermissions(this@MainActivity, arrayOf(Manifest.permission.CAMERA), REQUEST_PERMISSIONS)
+                                }
+                            }
                         }
                     }
-                    if (needed.isNotEmpty()) {
-                        ActivityCompat.requestPermissions(this@MainActivity,
-                            needed.toTypedArray(), REQUEST_PERMISSIONS)
-                    }
-                    it.grant(it.resources)
+                    req.grant(req.resources)
                 }
             }
         }
