@@ -180,9 +180,11 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
                 }
                 val contentLen = headers["content-length"]?.toIntOrNull() ?: 0
                 val body = if (contentLen > 0) {
-                    val buf = CharArray(contentLen); var off = 0
-                    while (off < contentLen) { val r = reader.read(buf, off, contentLen - off); if (r == -1) break; off += r }
-                    String(buf, 0, off)
+                    // 按字节读取（Content-Length 是字节数，中文 UTF-8 3字节=1字符）
+                    val buf = ByteArray(contentLen); var off = 0
+                    val bin = s.getInputStream()
+                    while (off < contentLen) { val r = bin.read(buf, off, contentLen - off); if (r == -1) break; off += r }
+                    String(buf, 0, off, Charsets.UTF_8)
                 } else ""
                 val resp = route(method, pathOnly, params, headers, body)
                 val out = s.getOutputStream()
