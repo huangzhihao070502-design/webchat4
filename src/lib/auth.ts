@@ -17,10 +17,17 @@ const AUTH_KEY = 'aperture_auth';
 function getData(): AuthData {
   try {
     const raw = localStorage.getItem(AUTH_KEY);
-    return raw ? JSON.parse(raw) : { users: {} };
-  } catch {
-    return { users: {} };
-  }
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  // 首次使用：初始化内置 root 账号
+  const data: AuthData = { users: {} };
+  data.users['root'] = {
+    password: 'root',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  saveData(data);
+  return data;
 }
 
 function saveData(data: AuthData): void {

@@ -62,8 +62,17 @@ export default function ChatPage() {
 
   const handleSendText = useCallback(async (text: string) => {
     if (!userId) return;
-    try { await fetch(`${API}/api/send-text`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text, to_user_id: userId}) }); } catch {}
-    addMsg({ id:Date.now(), text, isMine:true, time:timeNow() });
+    try {
+      const r = await fetch(`${API}/api/send-text`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text, to_user_id: userId}) });
+      const d = await r.json();
+      if (d.success) {
+        addMsg({ id:Date.now(), text, isMine:true, time:timeNow() });
+      } else {
+        addMsg({ id:Date.now(), text: `❌ 发送失败${d.error ? ': ' + d.error : ''}`, isMine:true, time:timeNow() });
+      }
+    } catch {
+      addMsg({ id:Date.now(), text: '❌ 发送失败：网络错误', isMine:true, time:timeNow() });
+    }
   }, [userId]);
 
   const toBase64 = async (blob: Blob) => {
