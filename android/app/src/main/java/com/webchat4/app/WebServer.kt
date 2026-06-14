@@ -372,12 +372,12 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             body.put("to_user_id", toUserId); body.put("rawsize", fileBuf.size)
             body.put("rawfilemd5", rawMd5); body.put("filesize", encrypted.size)
             body.put("no_need_thumb", true); body.put("aeskey", aesKeyHex)
-            val result = ilinkPost("getuploadurl", body, botToken ?: "") ?: return null
-            if (result.optInt("ret", 0) == -1 || result.has("errcode")) {
-                android.util.Log.e(TAG, "[UPLOAD] getuploadurl failed: ${result.optString("errmsg","")}")
+            val uploadResp = ilinkPost("getuploadurl", body, botToken ?: "") ?: return null
+            if (uploadResp.optInt("ret", 0) == -1 || uploadResp.has("errcode")) {
+                android.util.Log.e(TAG, "[UPLOAD] getuploadurl failed: ${uploadResp.optString("errmsg","")}")
                 return null
             }
-            val uploadParam = result.optString("upload_param", "")
+            val uploadParam = uploadResp.optString("upload_param", "")
             if (uploadParam.isEmpty()) return null
             val cdnUrl = "$CDN_BASE/upload?encrypted_query_param=${java.net.URLEncoder.encode(uploadParam, "UTF-8")}&filekey=${java.net.URLEncoder.encode(filekey, "UTF-8")}"
             val cdnConn = URL(cdnUrl).openConnection() as HttpsURLConnection
@@ -395,12 +395,12 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             mediaObj.put("encrypt_query_param", encryptedParam)
             mediaObj.put("aes_key", aesKeyB64)
             mediaObj.put("encrypt_type", 1)
-            val result = JSONObject()
-            result.put("filekey", filekey); result.put("media", mediaObj)
-            result.put("aes_key_hex", aesKeyHex); result.put("raw_size", fileBuf.size)
-            result.put("encrypted_size", encrypted.size); result.put("md5", rawMd5)
-            result.put("filename", filename)
-            result
+            val uploadResult = JSONObject()
+            uploadResult.put("filekey", filekey); uploadResult.put("media", mediaObj)
+            uploadResult.put("aes_key_hex", aesKeyHex); uploadResult.put("raw_size", fileBuf.size)
+            uploadResult.put("encrypted_size", encrypted.size); uploadResult.put("md5", rawMd5)
+            uploadResult.put("filename", filename)
+            uploadResult
         } catch (e: Exception) { android.util.Log.e(TAG, "[UPLOAD] Error: ${e.message}"); null }
     }
 
