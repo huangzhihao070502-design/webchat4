@@ -21,11 +21,6 @@ else
     exit 1
 fi
 
-# 1b. Copy Termux libraries
-if [ -d "$PROJECT_DIR/assets-tmp/lib" ] && [ "$(ls -A $PROJECT_DIR/assets-tmp/lib)" ]; then
-    cp -r "$PROJECT_DIR/assets-tmp/lib" "$ASSETS_DIR/lib"
-    echo "  lib/: $(du -sh $ASSETS_DIR/lib | cut -f1)"
-fi
 
 # 2. Package server code (压缩为 ZIP，在手机上解压)
 echo "Packaging server code..."

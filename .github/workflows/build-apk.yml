@@ -53,40 +53,20 @@ jobs:
             npm install --production --ignore-scripts
           fi
 
-      - name: Download Termux Node.js + dependencies for Android ARM64
+      - name: Download static Node.js for ARM64 (musl, no deps needed)
         run: |
           mkdir -p assets-tmp
-
-          # 下载 Node.js
-          curl -L -o /tmp/nodejs.deb \
-            "https://packages.termux.dev/apt/termux-main/pool/main/n/nodejs/nodejs_26.3.0_aarch64.deb"
-          dpkg-deb -x /tmp/nodejs.deb /tmp/node-extract
-          cp /tmp/node-extract/data/data/com.termux/files/usr/bin/node assets-tmp/node-arm64
-
-          # 下载依赖库: libc++, libicu, openssl, libnghttp2, libcares, brotli, zlib, libicu
-          for pkg in libc++ libicu libnghttp2 libcares brotli openssl zlib icu-data; do
-            PKG_URL="https://packages.termux.dev/apt/termux-main/pool/main"
-            case "$pkg" in
-              libc++)    curl -L -o /tmp/libcxx.deb "$PKG_URL/libc++/libc++_27c_aarch64.deb" 2>/dev/null && dpkg-deb -x /tmp/libcxx.deb /tmp/lib-extract ;;
-              libicu)    curl -L -o /tmp/icu.deb "$PKG_URL/i/icu/icu-libs_78.1_aarch64.deb" 2>/dev/null && dpkg-deb -x /tmp/icu.deb /tmp/lib-extract ;;
-              libnghttp2) curl -L -o /tmp/nghttp2.deb "$PKG_URL/n/nghttp2/libnghttp2_1.64.0_aarch64.deb" 2>/dev/null && dpkg-deb -x /tmp/nghttp2.deb /tmp/lib-extract ;;
-              libcares)  curl -L -o /tmp/cares.deb "$PKG_URL/c/c-ares/libcares_1.34.6_aarch64.deb" 2>/dev/null && dpkg-deb -x /tmp/cares.deb /tmp/lib-extract ;;
-              brotli)    curl -L -o /tmp/brotli.deb "$PKG_URL/b/brotli/libbrotli_1.2.0_aarch64.deb" 2>/dev/null && dpkg-deb -x /tmp/brotli.deb /tmp/lib-extract ;;
-              openssl)   curl -L -o /tmp/ssl.deb "$PKG_URL/o/openssl/libssl3_3.5.7_aarch64.deb" 2>/dev/null && dpkg-deb -x /tmp/ssl.deb /tmp/lib-extract ;;
-              zlib)      curl -L -o /tmp/zlib.deb "$PKG_URL/z/zlib/zlib_1.3.2_aarch64.deb" 2>/dev/null && dpkg-deb -x /tmp/zlib.deb /tmp/lib-extract ;;
-            esac
-          done
-
-          # 收集所有 .so 文件到 lib 目录
-          mkdir -p assets-tmp/lib
-          find /tmp/lib-extract -name "*.so*" -exec cp {} assets-tmp/lib/ \; 2>/dev/null || true
-
+          curl -L -o /tmp/node.tar.xz \
+            "https://unofficial-builds.nodejs.org/download/release/v20.20.2/node-v20.20.2-linux-arm64-musl.tar.xz"
+          tar -xJf /tmp/node.tar.xz -C /tmp/
+          cp /tmp/node-v20.20.2-linux-arm64-musl/bin/node assets-tmp/node-arm64
           chmod +x assets-tmp/node-arm64
-          echo "=== Node + libs ==="
           file assets-tmp/node-arm64
+          if ! file assets-tmp/node-arm64 | grep -q "ELF.*aarch64\|ELF.*ARM"; then
+            echo "ERROR: not a valid ARM64 ELF!"
+            exit 1
+          fi
           ls -lh assets-tmp/node-arm64
-          echo "Libraries:"
-          ls -lh assets-tmp/lib/ 2>/dev/null || echo "  (no libs)"
 
       - name: Package APK assets
         run: |
