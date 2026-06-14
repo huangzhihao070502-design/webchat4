@@ -831,6 +831,16 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
             val response = okHttp.newCall(request).execute()
             val respCode = response.code
             val respBody = response.body?.string() ?: ""
+            conn.setRequestProperty("X-WECHAT-UIN", android.util.Base64.encodeToString(uin.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP))
+            val requestBytes = data.toAsciiJsonBytes()
+            conn.setFixedLengthStreamingMode(requestBytes.size)
+            conn.outputStream.write(requestBytes)
+            val respCode = conn.responseCode
+            val respBody = if (respCode in 200..299) {
+                conn.inputStream.readBytes().decodeToString()
+            } else {
+                try { conn.errorStream?.readBytes()?.decodeToString() ?: "HTTP $respCode" } catch (_: Exception) { "HTTP $respCode" }
+            }
             if (respBody.trim().isEmpty() || respBody.trim() == "{}") {
                 if (respCode in 200..299) JSONObject(mapOf("ret" to 0))
                 else JSONObject(mapOf("ret" to -1, "errmsg" to "HTTP $respCode", "httpCode" to respCode))
