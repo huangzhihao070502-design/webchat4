@@ -261,20 +261,20 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             val cleanPath = if (path.startsWith("/dist/")) path.removePrefix("/dist") else path
             val assetPath = if (cleanPath == "/") "www/index.html" else "www${cleanPath}"
             val ext = cleanPath.substringAfterLast('.', "").lowercase()
-            val mime = if (cleanPath == "/" || ext == "html") "text/html" else MIME[ext] ?: "application/octet-stream"
+            val mime = if (cleanPath == "/" || ext == "html") "text/html; charset=utf-8" else MIME[ext] ?: "application/octet-stream"
             val data = context.assets.open(assetPath).use { it.readBytes() }
             return Resp(200, "OK", cors + mapOf("Content-Type" to mime, "Content-Length" to data.size.toString()), data)
         } catch (_: Exception) {
             return try {
                 val idx = context.assets.open("www/index.html").use { it.readBytes() }
-                Resp(200, "OK", cors + mapOf("Content-Type" to "text/html"), idx)
+                Resp(200, "OK", cors + mapOf("Content-Type" to "text/html; charset=utf-8"), idx)
             } catch (_: Exception) { Resp(404, "Not Found", cors, "Not Found".toByteArray()) }
         }
     }
 
     private fun jsonOk(cors: Map<String, String>, data: Any): Resp {
         val json = if (data is JSONObject) data.toString() else (data as JSONArray).toString()
-        return Resp(200, "OK", cors + mapOf("Content-Type" to "application/json"), json.toByteArray())
+        return Resp(200, "OK", cors + mapOf("Content-Type" to "application/json; charset=utf-8"), json.toByteArray(Charsets.UTF_8))
     }
 
     // ═══════════════════════════════════════════════
@@ -761,8 +761,8 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             conn.setRequestProperty("Connection", "close")
             // X-WECHAT-UIN 必须为正数（匹配 JS: Math.floor(Math.random() * 0xFFFFFFFF)）
             val uin = (Random().nextInt(Int.MAX_VALUE - 1) + 1).toString()
-            conn.setRequestProperty("X-WECHAT-UIN", android.util.Base64.encodeToString(uin.toByteArray(), android.util.Base64.NO_WRAP))
-            conn.outputStream.write(data.toByteArray())
+            conn.setRequestProperty("X-WECHAT-UIN", android.util.Base64.encodeToString(uin.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP))
+            conn.outputStream.write(data.toByteArray(Charsets.UTF_8))
             val respCode = conn.responseCode
             val respBody = if (respCode in 200..299) {
                 conn.inputStream.readBytes().decodeToString()
@@ -784,7 +784,7 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
         conn.doOutput = true; conn.connectTimeout = 30000; conn.readTimeout = 30000
         conn.setRequestProperty("Content-Type", "application/json")
         conn.setRequestProperty("Authorization", "Bearer $apiKey")
-        conn.outputStream.write(jsonBody.toByteArray())
+        conn.outputStream.write(jsonBody.toByteArray(Charsets.UTF_8))
         val resp = conn.inputStream.readBytes().decodeToString()
         JSONObject(resp)
     } catch (_: Exception) { null }
