@@ -207,7 +207,15 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             val j = JSONObject(body); val text = j.optString("text",""); val uid = j.optString("to_user_id","")
             if (text.isEmpty() || uid.isEmpty()) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "Missing fields")))
             val ctx = contextTokens[uid] ?: return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "No session")))
-            val r = ilinkPost("sendmessage", JSONObject(mapOf("msg" to JSONObject(mapOf("from_user_id" to "", "to_user_id" to uid, "client_id" to "msg-${System.currentTimeMillis()}", "message_type" to 2, "message_state" to 2, "context_token" to ctx, "item_list" to JSONArray(listOf(JSONObject(mapOf("type" to 1, "text_item" to JSONObject(mapOf("text" to text)))))))))), botToken?:""))
+            val textItem = JSONObject(mapOf("type" to 1, "text_item" to JSONObject(mapOf("text" to text))))
+            val msgObj = JSONObject(mapOf(
+                "from_user_id" to "", "to_user_id" to uid,
+                "client_id" to "msg-${System.currentTimeMillis()}",
+                "message_type" to 2, "message_state" to 2,
+                "context_token" to ctx,
+                "item_list" to JSONArray(listOf(textItem))
+            ))
+            val r = ilinkPost("sendmessage", JSONObject(mapOf("msg" to msgObj)), botToken ?: "")
             val ok = r?.opt("errcode")==null || r?.optInt("errcode",0)==0
             if (ok && r?.optInt("ret", 0) != -1) messages.add(JSONObject(mapOf("id" to ++msgId, "to" to uid, "text" to text, "time" to System.currentTimeMillis(), "dir" to "out")))
             return jsonOk(cors, JSONObject(mapOf("success" to ok)))
@@ -355,7 +363,16 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             val r=httpsPost(cfg.optString("api_url","").trimEnd('/')+"/chat/completions", cfg.optString("api_key",""), req.toString())?:return
             var reply=r.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content","")?:return
             val mc=cfg.optInt("reply_max_chars",0); if(mc>0&&reply.length>mc)reply=reply.take(mc)
-            ilinkPost("sendmessage",JSONObject(mapOf("msg" to JSONObject(mapOf("from_user_id" to "","to_user_id" to toUser,"client_id" to "ai-${Date().time.toString(36)}","message_type" to 2,"message_state" to 2,"context_token" to ctx,"item_list" to JSONArray(listOf(JSONObject(mapOf("type" to 1,"text_item" to JSONObject(mapOf("text" to reply)))))))))), botToken?:""); messages.add(JSONObject(mapOf("id" to ++msgId,"to" to toUser,"text" to reply,"time" to System.currentTimeMillis(),"dir" to "out")))
+            val replyItem = JSONObject(mapOf("type" to 1, "text_item" to JSONObject(mapOf("text" to reply))))
+            val replyMsg = JSONObject(mapOf(
+                "from_user_id" to "", "to_user_id" to toUser,
+                "client_id" to "ai-${Date().time.toString(36)}",
+                "message_type" to 2, "message_state" to 2,
+                "context_token" to ctx,
+                "item_list" to JSONArray(listOf(replyItem))
+            ))
+            ilinkPost("sendmessage", JSONObject(mapOf("msg" to replyMsg)), botToken ?: "")
+            messages.add(JSONObject(mapOf("id" to ++msgId, "to" to toUser, "text" to reply, "time" to System.currentTimeMillis(), "dir" to "out")))
         }catch(_:Exception){} }
 
     private fun buildPersonaPrompt(p: JSONObject): String = buildString{
