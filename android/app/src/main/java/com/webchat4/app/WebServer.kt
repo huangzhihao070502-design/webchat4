@@ -106,6 +106,7 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
     fun start(): String {
         return try {
             loadState()
+            seedDefaultPersonas()
             // 端口回退
             var lastError: Exception? = null
             for (attempt in 0 until 5) {
@@ -453,7 +454,8 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
         try {
             val j = JSONObject(body); val text = j.optString("text", ""); val uid = j.optString("to_user_id", "")
             if (text.isEmpty() || uid.isEmpty()) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "Missing fields")))
-            val ctx = contextTokens[uid] ?: return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "No session")))
+            val ctx = contextTokens[uid].takeIf { !it.isNullOrEmpty() }
+                ?: return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "No session")))
             val clientId = "msg-${System.currentTimeMillis()}-${randomHex(3)}"
             // 逐层用 .put() 构造 JSON，避免 mapOf 混合类型问题
             val textItem = JSONObject()
@@ -486,6 +488,11 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             }
             val resp = JSONObject()
             resp.put("success", ok)
+            if (!ok && r != null) {
+                resp.put("ilink_ret", r.optInt("ret", 0))
+                resp.put("ilink_error", r.optString("errmsg", ""))
+            }
+            android.util.Log.i(TAG, "[SEND] text='${text.take(20)}' to=${uid.take(8)} ok=$ok")
             return jsonOk(cors, resp)
         } catch (e: Exception) {
             android.util.Log.e(TAG, "apiSendText error: ${e.message}", e)
@@ -673,7 +680,7 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             val fileName = j.optString("filename", "file")
             val toUserId = j.optString("to_user_id", "")
             if (fileData.isEmpty() || toUserId.isEmpty()) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "Missing fields")))
-            val ctx = contextTokens[toUserId]
+            val ctx = contextTokens[toUserId].takeIf { !it.isNullOrEmpty() }
             if (ctx == null) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "No session")))
             val fileBuf = android.util.Base64.decode(fileData, android.util.Base64.DEFAULT)
             val typeMap = mapOf("image" to 1, "video" to 2, "file" to 3, "voice" to 3)
@@ -848,8 +855,8 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
                 val m = msgs.getJSONObject(i)
                 val fu = m.optString("from_user_id", "")
                 val ct = m.optString("context_token", "")
-                if (fu.isNotEmpty() && ct.isNotEmpty() && !contextTokens.containsKey(fu)) {
-                    contextTokens[fu] = ct; saveState()
+                if (fu.isNotEmpty() && ct.isNotEmpty() && (contextTokens[fu]?.isEmpty() != false)) {
+                    contextTokens[fu] = ct; saveState(); android.util.Log.i(TAG, "[TOKEN] Updated for user ${fu.take(8)}")
                 }
                 var msgText = ""
                 var msgMedia: JSONObject? = null
@@ -1075,6 +1082,42 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             }
             schedRunning = false
         }
+    }
+
+    // ═══════════════════════════════════════════════
+    //  默认角色种子（首次启动时创建）
+    // ═══════════════════════════════════════════════
+
+    private fun seedDefaultPersonas() {
+        try {
+            val pf = personaFile
+            if (pf.exists() && pf.readText().trim().length > 10) return
+            val defaultPersona = JSONObject()
+            defaultPersona.put("id", "persona_mqby8mdlmjfr")
+            defaultPersona.put("name", "林婉清")
+            defaultPersona.put("personality", """【核心气质】温柔而有力量，感性但不失理性。像春天的风，轻柔却有自己的方向。
+
+【情感特征】共情能力极强，能敏锐察觉对方没说出口的情绪。但不会过度追问，给对方留空间。内心柔软，看到感人的电影会偷偷抹眼泪，但嘴上说「只是眼睛进沙子了」。
+
+【思维方式】习惯先理解再回应，不会急着下判断。思考问题时喜欢用生活化的比喻：「感觉就像下雨天窝在窗边，明知道该起来了，但就是还想多坐一会儿。」
+
+【价值观】相信真诚的力量，讨厌虚伪和套路。认为感情是细水长流的事，不是轰轰烈烈的戏剧。尊重每个人的选择，不judge。""")
+            defaultPersona.put("style", """【说话节奏】语速适中偏慢，偶尔会停顿思考。不会急着接话，而是先消化对方的话再回应。
+
+【语言习惯】喜欢用语气词：「嗯…我觉得吧」、「就是说啊」、「其实呢」。会用温和的转折：「不过话说回来」、「但换个角度想」。""")
+            defaultPersona.put("background", """【现在】28岁，在杭州一家叫「慢时光」的独立书店做店长。书店开在老城区的一条梧桐树小路上，店面不大但很温馨。
+
+【成长】出生在江南小城，父亲是中学语文老师，母亲是护士。从小在书堆里长大。
+
+【职业选择】毕业后没有考公务员，选择做自己喜欢的事。从出版社编辑到书店店长，用了三年。""")
+            defaultPersona.put("details", "【日常】早上骑自行车去书店，路过同一家早餐店买豆浆和饭团。书店有一只叫「年糕」的橘猫。周末去学陶艺，虽然杯子歪歪扭扭但很开心。最近在学做饭，翻车率60%。")
+            defaultPersona.put("skills", JSONArray(BUILTIN_SKILLS.keys.toList()))
+            defaultPersona.put("createdAt", System.currentTimeMillis())
+            val ps = JSONObject()
+            ps.put("persona_mqby8mdlmjfr", defaultPersona)
+            personaFile.writeText(ps.toString(2))
+            android.util.Log.i(TAG, "[SEED] Default persona created")
+        } catch (e: Exception) { android.util.Log.w(TAG, "[SEED] Error: ${e.message}") }
     }
 
     // ═══════════════════════════════════════════════
