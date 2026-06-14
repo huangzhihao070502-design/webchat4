@@ -33,7 +33,9 @@ android {
         jvmTarget = "17"
     }
 
-    // 无需 noCompress，前端静态文件由服务器动态读取
+    aaptOptions {
+        noCompress("js", "css", "html", "svg", "png", "json", "woff2", "ttf")
+    }
 }
 
 dependencies {

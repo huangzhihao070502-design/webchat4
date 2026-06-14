@@ -21,8 +21,8 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
     private var running = false
     private val threadPool = Executors.newFixedThreadPool(8)
 
-    // ── 静态文件目录（从 assets 解压到 filesDir） ──
-    private val wwwDir: File = File(context.filesDir, "www")
+    // ── 静态文件目录（直接从 APK assets/www 读取） ──
+    private val wwwDir: String get() = "www"
 
     // ── 持久化状态 ──
     private val stateFile = File(context.filesDir, "state.json")
@@ -145,20 +145,7 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
     }
 
     private fun extractWww() {
-        if (wwwDir.exists() && File(wwwDir, "index.html").exists()) return
-        wwwDir.mkdirs()
-        try {
-            context.assets.open("www.zip").use { input ->
-                val zis = java.util.zip.ZipInputStream(input)
-                var entry = zis.nextEntry
-                while (entry != null) {
-                    val f = File(wwwDir, entry.name)
-                    if (entry.isDirectory) f.mkdirs()
-                    else { f.parentFile?.mkdirs(); FileOutputStream(f).use { zis.copyTo(it) } }
-                    zis.closeEntry(); entry = zis.nextEntry
-                }
-            }
-        } catch (_: Exception) {}
+        // 文件直接从 APK assets/www 读取，无需解压
     }
 
     private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css" to "text/css",
@@ -166,15 +153,21 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
         "ico" to "image/x-icon", "woff2" to "font/woff2", "ttf" to "font/ttf")
 
     private fun serveStatic(path: String, cors: Map<String, String>): Resp {
-        val fp = if (path == "/") "index.html" else path.trimStart('/')
-        val file = File(wwwDir, fp)
-        if (file.exists() && file.isFile) {
-            val mime = MIME[file.extension.lowercase()] ?: "application/octet-stream"
-            return Resp(200, "OK", cors + mapOf("Content-Type" to mime), file.readBytes())
+        try {
+            val assetPath = if (path == "/") "www/index.html" else "www${path}"
+            val ext = path.substringAfterLast('.', "").lowercase()
+            val mime = MIME[ext] ?: "application/octet-stream"
+            val data = context.assets.open(assetPath).use { it.readBytes() }
+            return Resp(200, "OK", cors + mapOf("Content-Type" to mime, "Content-Length" to data.size.toString()), data)
+        } catch (_: Exception) {
+            // SPA fallback - 如果文件不存在返回 index.html
+            return try {
+                val idx = context.assets.open("www/index.html").use { it.readBytes() }
+                Resp(200, "OK", cors + mapOf("Content-Type" to "text/html"), idx)
+            } catch (_: Exception) {
+                Resp(404, "Not Found", cors, "Not Found".toByteArray())
+            }
         }
-        val idx = File(wwwDir, "index.html")
-        return if (idx.exists()) Resp(200, "OK", cors + mapOf("Content-Type" to "text/html"), idx.readBytes())
-        else Resp(404, "Not Found", cors, "Not Found".toByteArray())
     }
 
     private fun jsonOk(cors: Map<String, String>, data: Any): Resp {
