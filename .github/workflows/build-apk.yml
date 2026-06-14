@@ -53,25 +53,20 @@ jobs:
             npm install --production --ignore-scripts
           fi
 
-      - name: Download static Node.js for ARM64 (musl)
+      - name: Download Termux Node.js for Android ARM64
         run: |
           mkdir -p assets-tmp
-          # 使用 musl 静态编译的 Node.js，无需 PRoot 或 rootfs
-          NODE_VER="v24.4.0"
-          curl -L -o /tmp/node.tar.xz \
-            "https://unofficial-builds.nodejs.org/download/release/${NODE_VER}/node-${NODE_VER}-linux-arm64-musl.tar.xz" || \
-          # 备选：直接下载 Termux 的 nodejs 二进制
-          curl -L -o /tmp/node.deb \
-            "https://packages.termux.dev/apt/termux-main/pool/main/n/nodejs/nodejs_24.4.0_aarch64.deb"
-          if [ -f /tmp/node.tar.xz ]; then
-            tar -xJf /tmp/node.tar.xz -C /tmp/
-            cp /tmp/node-${NODE_VER}-linux-arm64-musl/bin/node assets-tmp/node-arm64
-          elif [ -f /tmp/node.deb ]; then
-            dpkg-deb -x /tmp/node.deb /tmp/node-extract
-            cp /tmp/node-extract/data/data/com.termux/files/usr/bin/node assets-tmp/node-arm64
-          fi
+          curl -L -o /tmp/nodejs.deb \
+            "https://packages.termux.dev/apt/termux-main/pool/main/n/nodejs/nodejs_26.3.0_aarch64.deb"
+          dpkg-deb -x /tmp/nodejs.deb /tmp/node-extract
+          cp /tmp/node-extract/data/data/com.termux/files/usr/bin/node assets-tmp/node-arm64
           chmod +x assets-tmp/node-arm64
           file assets-tmp/node-arm64
+          # 检查 ELF
+          if ! file assets-tmp/node-arm64 | grep -q "ELF.*aarch64\|ELF.*ARM"; then
+            echo "ERROR: not a valid ARM64 ELF!"
+            exit 1
+          fi
           ls -lh assets-tmp/node-arm64
 
       - name: Package APK assets
