@@ -419,7 +419,7 @@ export default function SettingsPage({ onLogout }: Props) {
             <ArrowLeft size={20} strokeWidth={1.5} />
           </button>
           <h1 style={{ fontSize:20, fontWeight:600, color:'#3E2723', flex:1 }}>运行日志</h1>
-          <button onClick={() => { fetch(${API}/api/logs/clear, {method:'POST'}); setLogs([]); }}
+          <button onClick={() => { fetch('${API}/api/logs/clear', {method:'POST'}); setLogs([]); }}
             style={{ padding:'6px 14px', borderRadius:10, border:'none', background:'rgba(239,68,68,0.08)', color:'#ef4444', fontSize:12, fontWeight:500, cursor:'pointer' }}>清空</button>
           <button onClick={() => { setLogFilter(f => f === 'all' ? 'ERROR' : 'all'); }}
             style={{ padding:'6px 14px', borderRadius:10, border:'none', background:'rgba(200,159,126,0.12)', color:'#C89F7E', fontSize:12, fontWeight:500, cursor:'pointer' }}>{logFilter === 'all' ? '仅错误' : '全部'}</button>
