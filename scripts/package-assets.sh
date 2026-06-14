@@ -10,77 +10,50 @@ ASSETS_DIR="$PROJECT_DIR/android/app/src/main/assets"
 rm -rf "$ASSETS_DIR"
 mkdir -p "$ASSETS_DIR"
 
-# 1. Package rootfs with webchat4 code
-echo "Adding webchat4 code to rootfs..."
-WEBCHAT4_DEST="$PROJECT_DIR/rootfs/home/webchat4"
-
-if [ ! -d "$PROJECT_DIR/rootfs" ]; then
-    echo "ERROR: rootfs directory not found! Run prepare-rootfs.sh first."
+# 1. Copy Node.js binary
+echo "Packaging Node.js..."
+if [ -f "$PROJECT_DIR/assets-tmp/node-arm64" ]; then
+    cp "$PROJECT_DIR/assets-tmp/node-arm64" "$ASSETS_DIR/node-arm64"
+    chmod +x "$ASSETS_DIR/node-arm64"
+    echo "  node-arm64: $(du -sh $ASSETS_DIR/node-arm64 | cut -f1)"
+else
+    echo "ERROR: node-arm64 not found in assets-tmp/!"
     exit 1
 fi
 
-mkdir -p "$WEBCHAT4_DEST"
-
-# Copy server code
-if [ -d "$PROJECT_DIR/server" ]; then
-    cp -r "$PROJECT_DIR/server" "$WEBCHAT4_DEST/server"
-    echo "  Copied server/ ($(du -sh $PROJECT_DIR/server | cut -f1))"
-fi
-
-# Copy dist (built frontend)
-if [ -d "$PROJECT_DIR/dist" ]; then
-    cp -r "$PROJECT_DIR/dist" "$WEBCHAT4_DEST/dist"
-    echo "  Copied dist/"
-fi
-
-# Copy static assets
-if [ -d "$PROJECT_DIR/assets" ]; then
-    cp -r "$PROJECT_DIR/assets" "$WEBCHAT4_DEST/assets"
-    echo "  Copied assets/"
-fi
-
-# Copy root package.json for reference
-if [ -f "$PROJECT_DIR/package.json" ]; then
-    cp "$PROJECT_DIR/package.json" "$WEBCHAT4_DEST/"
-fi
-
-# Repackage rootfs as ZIP (Java原生支持，无需外部命令)
-echo "Creating rootfs.zip..."
+# 2. Package server code (压缩为 ZIP，在手机上解压)
+echo "Packaging server code..."
 cd "$PROJECT_DIR"
-# First remove broken symlinks (they cause zipfile errors)
-find rootfs/ -type l ! -exec test -e {} \; -delete 2>/dev/null || true
 python3 -c "
 import zipfile, os
-zf = zipfile.ZipFile('$ASSETS_DIR/rootfs.zip', 'w', zipfile.ZIP_DEFLATED)
-for root, dirs, files in os.walk('rootfs/'):
+zf = zipfile.ZipFile('$ASSETS_DIR/server.zip', 'w', zipfile.ZIP_DEFLATED)
+
+# server 目录
+for root, dirs, files in os.walk('server/'):
     for f in files:
         fp = os.path.join(root, f)
-        if not os.access(fp, os.R_OK):
-            continue
         arcname = os.path.relpath(fp, '.')
         zf.write(fp, arcname)
     for d in dirs[:]:
         fp = os.path.join(root, d)
-        if not os.access(fp, os.R_OK):
-            dirs.remove(d)
-            continue
         arcname = os.path.relpath(fp, '.') + '/'
         zf.write(fp, arcname)
-zf.close()
-print('rootfs.zip created')
-"
-echo "  rootfs.zip: $(du -sh $ASSETS_DIR/rootfs.zip | cut -f1)"
 
-# 2. Copy proot binary
-echo "Packaging proot..."
-if [ -f "$PROJECT_DIR/assets-tmp/proot-arm64" ]; then
-    cp "$PROJECT_DIR/assets-tmp/proot-arm64" "$ASSETS_DIR/proot-arm64"
-    chmod +x "$ASSETS_DIR/proot-arm64"
-    echo "  proot-arm64: $(du -sh $ASSETS_DIR/proot-arm64 | cut -f1)"
-else
-    echo "ERROR: proot-arm64 not found! Download it first."
-    exit 1
-fi
+# dist 目录（前端构建产物）
+if os.path.isdir('dist/'):
+    for root, dirs, files in os.walk('dist/'):
+        for f in files:
+            fp = os.path.join(root, f)
+            arcname = os.path.relpath(fp, '.')
+            zf.write(fp, arcname)
+        for d in dirs[:]:
+            fp = os.path.join(root, d)
+            arcname = os.path.relpath(fp, '.') + '/'
+            zf.write(fp, arcname)
+zf.close()
+print('server.zip created')
+"
+echo "  server.zip: $(du -sh $ASSETS_DIR/server.zip | cut -f1)"
 
 echo ""
 echo "=== Final Assets ==="
