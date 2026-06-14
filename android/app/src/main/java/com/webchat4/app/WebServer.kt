@@ -487,8 +487,16 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
         try {
             val j = JSONObject(body); val text = j.optString("text", ""); val uid = j.optString("to_user_id", "")
             if (text.isEmpty() || uid.isEmpty()) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "Missing fields")))
-            val ctx = contextTokens[uid].takeIf { !it.isNullOrEmpty() }
-                ?: return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "No session")))
+            var ctx = contextTokens[uid].takeIf { !it.isNullOrEmpty() }
+            if (ctx == null) {
+                logInfo("SEND", "No token for ${uid.take(12)}, running exhaust...")
+                exhaustMessages()
+                ctx = contextTokens[uid].takeIf { !it.isNullOrEmpty() }
+            }
+            if (ctx == null) {
+                logErr("SEND", "No session for ${uid.take(12)} after exhaust")
+                return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "No session")))
+            }
             val clientId = "msg-${System.currentTimeMillis()}-${randomHex(3)}"
             // 逐层用 .put() 构造 JSON，避免 mapOf 混合类型问题
             val textItem = JSONObject()
