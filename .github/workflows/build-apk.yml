@@ -39,21 +39,12 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build frontend
+      - name: Build frontend (Vite)
         run: npm run build
         env:
           NODE_ENV: production
 
-      - name: Install server production dependencies
-        working-directory: ./server
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --production
-          else
-            npm install --production --ignore-scripts
-          fi
-
-      - name: Package APK assets (node + libs + server)
+      - name: Package frontend assets (www.zip)
         run: |
           chmod +x scripts/package-assets.sh
           bash scripts/package-assets.sh

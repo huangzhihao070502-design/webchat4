@@ -33,9 +33,7 @@ android {
         jvmTarget = "17"
     }
 
-    aaptOptions {
-        noCompress("zip", "so")
-    }
+    // 无需 noCompress，前端静态文件由服务器动态读取
 }
 
 dependencies {

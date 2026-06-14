@@ -4,62 +4,50 @@ import android.os.Bundle
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 
 class MainActivity : AppCompatActivity() {
     private var serverManager: ServerManager? = null
-    private var webView: WebView? = null
-    private var statusText: TextView? = null
-    private var progressBar: android.widget.ProgressBar? = null
-    private var titleText: TextView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        webView = findViewById(R.id.webview)
-        statusText = findViewById(R.id.status_text)
-        progressBar = findViewById(R.id.progress_bar)
-        titleText = findViewById(R.id.title_text)
+        val webView = findViewById<WebView>(R.id.webview)
+        val splash = findViewById<android.view.View>(R.id.splash_layout)
 
-        webView?.settings?.apply {
+        webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
-            allowFileAccess = false
             setSupportZoom(true)
             builtInZoomControls = true
             displayZoomControls = false
         }
-        webView?.webViewClient = object : WebViewClient() {
+        webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
-                findViewById<android.view.View>(R.id.splash_layout)?.visibility = android.view.View.GONE
-                webView?.visibility = android.view.View.VISIBLE
+                splash?.visibility = android.view.View.GONE
+                webView.visibility = android.view.View.VISIBLE
             }
         }
-        webView?.webChromeClient = WebChromeClient()
-
-        statusText?.text = "正在启动..."
-        titleText?.text = "WebChat4"
+        webView.webChromeClient = WebChromeClient()
 
         serverManager = ServerManager(this)
         serverManager?.startServer { success ->
             runOnUiThread {
                 if (success) {
-                    webView?.loadUrl("http://127.0.0.1:3001")
+                    webView.loadUrl("http://127.0.0.1:3001")
                 } else {
-                    val err = serverManager?.lastError ?: "未知错误"
-                    statusText?.text = "启动失败:\n\n$err"
-                    statusText?.setTextColor(0xFFCC0000.toInt())
-                    titleText?.text = "错误"
-                    progressBar?.visibility = android.view.View.GONE
+                    findViewById<android.widget.TextView>(R.id.status_text)?.let {
+                        it.text = "启动失败: 无法启动HTTP服务器"
+                        it.setTextColor(0xFFCC0000.toInt())
+                    }
                 }
             }
         }
     }
 
     override fun onBackPressed() {
-        if (webView?.canGoBack() == true) webView?.goBack()
-        else super.onBackPressed()
+        val w = findViewById<WebView>(R.id.webview)
+        if (w.canGoBack()) w.goBack() else super.onBackPressed()
     }
 }
