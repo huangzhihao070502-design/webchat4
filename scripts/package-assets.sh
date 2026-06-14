@@ -47,20 +47,18 @@ fi
 # Repackage rootfs as ZIP (Java原生支持，无需外部命令)
 echo "Creating rootfs.zip..."
 cd "$PROJECT_DIR"
+# First remove broken symlinks (they cause zipfile errors)
+find rootfs/ -type l ! -exec test -e {} \; -delete 2>/dev/null || true
 python3 -c "
 import zipfile, os
 zf = zipfile.ZipFile('$ASSETS_DIR/rootfs.zip', 'w', zipfile.ZIP_DEFLATED)
 for root, dirs, files in os.walk('rootfs/'):
     for f in files:
         fp = os.path.join(root, f)
-        if not os.path.exists(fp) and not os.path.islink(fp):
-            continue
         arcname = os.path.relpath(fp, '.')
         zf.write(fp, arcname)
-    for d in dirs:
+    for d in dirs[:]:
         fp = os.path.join(root, d)
-        if not os.path.exists(fp) and not os.path.islink(fp):
-            continue
         arcname = os.path.relpath(fp, '.') + '/'
         zf.write(fp, arcname)
 zf.close()
