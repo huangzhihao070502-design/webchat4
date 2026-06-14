@@ -349,7 +349,7 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             val encryptedData = conn.inputStream.readBytes()
             if (aesKeyB64.isNotEmpty()) {
                 val aesKeyHex = android.util.Base64.decode(aesKeyB64, android.util.Base64.DEFAULT).decodeToString()
-                return aesEcbDecrypt(encryptedData, aesKeyHex)
+                return try { aesEcbDecrypt(encryptedData, aesKeyHex) } catch (_: Exception) { encryptedData }
             }
             encryptedData
         } catch (e: Exception) { android.util.Log.e(TAG, "CDN download error: ${e.message}"); null }
@@ -871,15 +871,21 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
                     if (item.has("text_item")) {
                         msgText = item.optJSONObject("text_item")?.optString("text", "") ?: ""
                     }
-                    // 媒体消息：iLink 中 media 字段是 JSONObject，不是字符串！
+                    // 媒体消息：iLink 中 media 可能是 JSONObject 也可能是 String
+                    fun extractMediaFields(mediaObj: JSONObject?, fallbackStr: String?): Pair<String, String> {
+                        if (mediaObj != null) {
+                            val e = mediaObj.optString("encrypt_query_param", "")
+                            val a = mediaObj.optString("aes_key", "")
+                            if (e.isNotEmpty()) return Pair(e, a)
+                        }
+                        return Pair(fallbackStr ?: "", "")
+                    }
                     if (item.has("image_item")) {
                         val imgItem = item.optJSONObject("image_item")
-                        val imgMedia = imgItem?.optJSONObject("media")
-                        val eqp = imgMedia?.optString("encrypt_query_param", "") ?: ""
-                        val aesKey = imgMedia?.optString("aes_key", "") ?: imgItem?.optString("aeskey", "") ?: ""
+                        val (eqp, aesKey) = extractMediaFields(imgItem?.optJSONObject("media"), imgItem?.optString("media", null))
                         val cdn = JSONObject()
                         cdn.put("encrypt_query_param", eqp)
-                        cdn.put("aes_key", aesKey)
+                        cdn.put("aes_key", aesKey.ifEmpty { imgItem?.optString("aeskey", "") ?: "" })
                         msgMedia = JSONObject()
                         msgMedia.put("type", "image")
                         msgMedia.put("filename", imgItem?.optString("filename", "image.jpg") ?: "image.jpg")
@@ -887,8 +893,7 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
                         if (msgText.isEmpty()) msgText = "[图片]"
                     } else if (item.has("voice_item")) {
                         val vItem = item.optJSONObject("voice_item")
-                        val vMedia = vItem?.optJSONObject("media")
-                        val vEqp = vMedia?.optString("encrypt_query_param", "") ?: ""
+                        val (vEqp, _) = extractMediaFields(vItem?.optJSONObject("media"), vItem?.optString("media", null))
                         val vCdn = JSONObject()
                         vCdn.put("encrypt_query_param", vEqp)
                         vCdn.put("aes_key", "")
@@ -899,8 +904,7 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
                         if (msgText.isEmpty()) msgText = "[语音]"
                     } else if (item.has("file_item")) {
                         val fItem = item.optJSONObject("file_item")
-                        val fMedia = fItem?.optJSONObject("media")
-                        val fEqp = fMedia?.optString("encrypt_query_param", "") ?: ""
+                        val (fEqp, _) = extractMediaFields(fItem?.optJSONObject("media"), fItem?.optString("media", null))
                         val fCdn = JSONObject()
                         fCdn.put("encrypt_query_param", fEqp)
                         fCdn.put("aes_key", "")
@@ -914,8 +918,7 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
                         if (msgText.isEmpty()) msgText = "[文件] $fn"
                     } else if (item.has("video_item")) {
                         val vidItem = item.optJSONObject("video_item")
-                        val vidMedia = vidItem?.optJSONObject("media")
-                        val vidEqp = vidMedia?.optString("encrypt_query_param", "") ?: ""
+                        val (vidEqp, _) = extractMediaFields(vidItem?.optJSONObject("media"), vidItem?.optString("media", null))
                         val vidCdn = JSONObject()
                         vidCdn.put("encrypt_query_param", vidEqp)
                         vidCdn.put("aes_key", "")
