@@ -221,7 +221,12 @@ export default function ChatPage() {
                   {isPlaying ? <Pause size={16} strokeWidth={1.5} fill={mine?'white':'#C89F7E'}/> : <Play size={16} strokeWidth={1.5} fill={mine?'white':'#C89F7E'}/>}
                   <span style={{fontSize:13}}>{msg.voiceDuration||3}"</span>
                 </button>) : msg.isLocation ? <div style={{display:'flex',alignItems:'center',gap:6}}><MapPin size={16} strokeWidth={1.5}/><span>{msg.text}</span></div>
-                : msg.isFile ? <div style={{display:'flex',alignItems:'center',gap:6}}><File size={16} strokeWidth={1.5}/><span>{msg.text}</span></div>
+                : msg.isFile ? <div style={{display:'flex',alignItems:'center',gap:6}}>
+                  <File size={16} strokeWidth={1.5}/>
+                  {msg.mediaCacheKey ? (
+                    <a href={`/api/media/${msg.mediaCacheKey}`} download style={{color:'inherit',textDecoration:'underline'}}>{msg.text}</a>
+                  ) : <span>{msg.text}</span>}
+                </div>
                 : msg.text}
                 <div style={{marginTop:2,fontSize:10,textAlign:'right',color:mine?'rgba(255,255,255,0.6)':'rgba(141,110,99,0.6)'}}>{showDate?'':msg.time.slice(0,5)}</div>
               </div>

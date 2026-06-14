@@ -342,13 +342,16 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
         return try {
             val eqp = cdnMedia.optString("encrypt_query_param", "").ifEmpty { cdnMedia.optString("encrypted_query_param", "") }
             val aesKeyB64 = cdnMedia.optString("aes_key", "")
-            if (eqp.isEmpty() || aesKeyB64.isEmpty()) return null
-            val aesKeyHex = android.util.Base64.decode(aesKeyB64, android.util.Base64.DEFAULT).decodeToString()
+            if (eqp.isEmpty()) return null
             val dlUrl = "$CDN_BASE/download?encrypted_query_param=${java.net.URLEncoder.encode(eqp, "UTF-8")}"
             val conn = URL(dlUrl).openConnection() as HttpsURLConnection
             conn.connectTimeout = 30000; conn.readTimeout = 30000
             val encryptedData = conn.inputStream.readBytes()
-            aesEcbDecrypt(encryptedData, aesKeyHex)
+            if (aesKeyB64.isNotEmpty()) {
+                val aesKeyHex = android.util.Base64.decode(aesKeyB64, android.util.Base64.DEFAULT).decodeToString()
+                return aesEcbDecrypt(encryptedData, aesKeyHex)
+            }
+            encryptedData
         } catch (e: Exception) { android.util.Log.e(TAG, "CDN download error: ${e.message}"); null }
     }
 
@@ -466,7 +469,7 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             val itemList = JSONArray()
             itemList.put(textItem)
             val msgObj = JSONObject()
-            msgObj.put("from_user_id", "")
+            msgObj.put("from_user_id", botUserId ?: "")
             msgObj.put("to_user_id", uid)
             msgObj.put("client_id", clientId)
             msgObj.put("message_type", 2)
@@ -475,8 +478,14 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             msgObj.put("item_list", itemList)
             val msgWrapper = JSONObject()
             msgWrapper.put("msg", msgObj)
+            val bodyStr = msgWrapper.toString()
+            android.util.Log.i(TAG, "[SEND] Request: uid=${uid.take(8)} ctx=${ctx.take(8)}... bodyLen=${bodyStr.length}")
             val r = ilinkPost("sendmessage", msgWrapper, botToken!!)
-            val ok = r != null && r.optInt("ret", 0) != -1 && (r.opt("errcode") == null || r.optInt("errcode", 0) == 0)
+            val iLinkRet = r?.optInt("ret", 0) ?: -999
+            val iLinkErr = r?.optString("errmsg", "") ?: "null_response"
+            val iLinkHttp = r?.optInt("httpCode", 0) ?: 0
+            val ok = r != null && iLinkRet != -1 && (r.opt("errcode") == null || r.optInt("errcode", 0) == 0)
+            android.util.Log.i(TAG, "[SEND] Result: ok=$ok ret=$iLinkRet err=$iLinkErr http=$iLinkHttp")
             if (ok) {
                 val msgEntry = JSONObject()
                 msgEntry.put("id", ++msgId)
@@ -488,11 +497,7 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             }
             val resp = JSONObject()
             resp.put("success", ok)
-            if (!ok && r != null) {
-                resp.put("ilink_ret", r.optInt("ret", 0))
-                resp.put("ilink_error", r.optString("errmsg", ""))
-            }
-            android.util.Log.i(TAG, "[SEND] text='${text.take(20)}' to=${uid.take(8)} ok=$ok")
+            resp.put("debug", "ret=$iLinkRet err=$iLinkErr http=$iLinkHttp")
             return jsonOk(cors, resp)
         } catch (e: Exception) {
             android.util.Log.e(TAG, "apiSendText error: ${e.message}", e)
