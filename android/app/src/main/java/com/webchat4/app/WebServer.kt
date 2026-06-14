@@ -30,6 +30,19 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
     private var running = false
     private val threadPool = Executors.newFixedThreadPool(8)
 
+    // ── 日志系统 ──
+    private data class LogEntry(val time: String, val level: String, val tag: String, val msg: String)
+    private val logs = java.util.concurrent.ConcurrentLinkedQueue<LogEntry>()
+    private fun log(level: String, tag: String, msg: String) {
+        val t = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(Date())
+        logs.add(LogEntry(t, level, tag, msg))
+        if (logs.size > 500) { for (i in 0 until 50) logs.poll() }
+        android.util.Log.i("$TAG/$tag", msg)
+    }
+    private fun logErr(tag: String, msg: String) { log("ERROR", tag, msg) }
+    private fun logWarn(tag: String, msg: String) { log("WARN", tag, msg) }
+    private fun logInfo(tag: String, msg: String) { log("INFO", tag, msg) }
+
     // ── 持久化状态 ──
     private val stateFile = File(context.filesDir, "state.json")
     private var botToken: String? = null
@@ -225,6 +238,8 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
             path == "/api/add-friend-poll" -> apiAddFriendPoll(cors)
             path == "/api/send-media" -> apiSendMedia(body, cors)
             path.startsWith("/api/media/") -> apiMedia(path, cors)
+            path == "/api/logs" -> apiGetLogs(cors)
+            path == "/api/logs/clear" -> apiClearLogs(cors)
             else -> serveStatic(path, cors)
         }
     }
@@ -500,7 +515,11 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
             val iLinkErr = r?.optString("errmsg", "") ?: "null_response"
             val iLinkHttp = r?.optInt("httpCode", 0) ?: 0
             val ok = r != null && iLinkRet != -1 && (r.opt("errcode") == null || r.optInt("errcode", 0) == 0)
-            android.util.Log.i(TAG, "[SEND] Result: ok=$ok ret=$iLinkRet err=$iLinkErr http=$iLinkHttp")
+            if (ok) {
+                logInfo("SEND", "text='${text.take(30)}' to=${uid.take(12)} ok ret=$iLinkRet")
+            } else {
+                logErr("SEND", "text='${text.take(30)}' to=${uid.take(12)} FAIL ret=$iLinkRet err=$iLinkErr http=$iLinkHttp")
+            }
             if (ok) {
                 val msgEntry = JSONObject()
                 msgEntry.put("id", ++msgId)
@@ -543,8 +562,23 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
     }
 
     private fun apiDebugLog(body: String, cors: Map<String, String>): Resp {
-        try { val j = JSONObject(body); android.util.Log.w(TAG, "[FE] ${j.optString("msg", "")}") } catch (_: Exception) {}
+        try { val j = JSONObject(body); logErr("FRONTEND", j.optString("msg", "")) } catch (_: Exception) {}
         return Resp(200, "OK", cors, "ok".toByteArray())
+    }
+
+    // ── 日志 API ──
+    private fun apiGetLogs(cors: Map<String, String>): Resp {
+        val arr = JSONArray()
+        logs.forEach { e ->
+            val o = JSONObject()
+            o.put("time", e.time); o.put("level", e.level); o.put("tag", e.tag); o.put("msg", e.msg)
+            arr.put(o)
+        }
+        return jsonOk(cors, arr)
+    }
+    private fun apiClearLogs(cors: Map<String, String>): Resp {
+        logs.clear()
+        return jsonOk(cors, JSONObject(mapOf("success" to true)))
     }
 
     // ═══════════════════════════════════════════════
@@ -666,10 +700,11 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
                         when (r.optString("status", "")) {
                             "confirmed" -> {
                                 afStatus = "confirmed"
-                                // 新用户自动添加到 contextTokens
                                 val newUid = r.optString("ilink_user_id", "")
+                                logInfo("ADD-FRIEND", "Confirmed uid=${newUid.take(16)} token=${r.optString("context_token","").take(16)}")
                                 if (newUid.isNotEmpty() && !contextTokens.containsKey(newUid)) {
                                     contextTokens[newUid] = ""; saveState()
+                                    logInfo("ADD-FRIEND", "Placed ${newUid.take(16)} starting exhaust")
                                     threadPool.execute { exhaustMessages() }
                                 }
                                 break
@@ -851,18 +886,20 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
 
     private fun exhaustMessages() {
         if (botToken == null) return
+        var localCursor = cursor
         for (i in 0 until 10) {
             try {
-                val r = ilinkPost("getupdates", JSONObject(mapOf("get_updates_buf" to cursor)), botToken!!)
+                val r = ilinkPost("getupdates", JSONObject(mapOf("get_updates_buf" to localCursor)), botToken!!)
                 if (r == null) break
                 val ret = r.optInt("ret", 0)
-                if (ret == -1) { android.util.Log.w(TAG, "[EXHAUST] ret=-1: ${r.optString("errmsg", "")}"); break }
-                if (r.has("get_updates_buf")) cursor = r.optString("get_updates_buf", "")
+                if (ret == -1) { logWarn("EXHAUST", "ret=-1: ${r.optString("errmsg", "")}"); break }
+                if (r.has("get_updates_buf")) localCursor = r.optString("get_updates_buf", "")
                 val msgs = r.optJSONArray("msgs") ?: break
                 processRawMessages(msgs)
                 if (msgs.length() == 0) break
-            } catch (e: Exception) { android.util.Log.w(TAG, "[EXHAUST] Exception: ${e.message}"); break }
+            } catch (e: Exception) { logWarn("EXHAUST", "Exception: ${e.message}"); break }
         }
+        if (localCursor > cursor) cursor = localCursor
     }
 
     private fun pollMessages() {
@@ -888,7 +925,8 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
                 val fu = m.optString("from_user_id", "")
                 val ct = m.optString("context_token", "")
                 if (fu.isNotEmpty() && ct.isNotEmpty() && (contextTokens[fu]?.isEmpty() != false)) {
-                    contextTokens[fu] = ct; saveState(); android.util.Log.i(TAG, "[TOKEN] Updated for user ${fu.take(8)}")
+                    contextTokens[fu] = ct; saveState()
+                    logInfo("TOKEN", "Updated for ${fu.take(12)} token=${ct.take(16)}")
                 }
                 var msgText = ""
                 var msgMedia: JSONObject? = null
