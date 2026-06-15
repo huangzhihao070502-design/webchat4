@@ -1,0 +1,112 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.webchat4.app"
+4    android:versionCode="1"
+5    android:versionName="1.0.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="26"
+9        android:targetSdkVersion="35" />
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:3:5-67
+11-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:3:22-64
+12    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+12-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:4:5-77
+12-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:4:22-74
+13    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+13-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:5:5-87
+13-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:5:22-84
+14    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+14-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:6:5-79
+14-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:6:22-76
+15    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+15-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:7:5-81
+15-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:7:22-78
+16    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+16-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:8:5-71
+16-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:8:22-68
+17    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+17-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:9:5-76
+17-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:9:22-73
+18    <uses-permission
+18-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:10:5-107
+19        android:name="android.permission.READ_EXTERNAL_STORAGE"
+19-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:10:22-77
+20        android:maxSdkVersion="32" />
+20-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:10:78-104
+21    <uses-permission android:name="android.permission.CAMERA" />
+21-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:11:5-65
+21-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:11:22-62
+22
+23    <permission
+23-->[androidx.core:core:1.12.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/e301ef7b03c70a30fa9dbfc1c07bd30d/transformed/core-1.12.0/AndroidManifest.xml:22:5-24:47
+24        android:name="com.webchat4.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+24-->[androidx.core:core:1.12.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/e301ef7b03c70a30fa9dbfc1c07bd30d/transformed/core-1.12.0/AndroidManifest.xml:23:9-81
+25        android:protectionLevel="signature" />
+25-->[androidx.core:core:1.12.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/e301ef7b03c70a30fa9dbfc1c07bd30d/transformed/core-1.12.0/AndroidManifest.xml:24:9-44
+26
+27    <uses-permission android:name="com.webchat4.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+27-->[androidx.core:core:1.12.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/e301ef7b03c70a30fa9dbfc1c07bd30d/transformed/core-1.12.0/AndroidManifest.xml:26:5-97
+27-->[androidx.core:core:1.12.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/e301ef7b03c70a30fa9dbfc1c07bd30d/transformed/core-1.12.0/AndroidManifest.xml:26:22-94
+28
+29    <application
+29-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:13:5-28:19
+30        android:allowBackup="true"
+30-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:14:9-35
+31        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+31-->[androidx.core:core:1.12.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/e301ef7b03c70a30fa9dbfc1c07bd30d/transformed/core-1.12.0/AndroidManifest.xml:28:18-86
+32        android:debuggable="true"
+33        android:extractNativeLibs="false"
+34        android:label="WebChat4"
+34-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:15:9-33
+35        android:supportsRtl="true"
+35-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:16:9-35
+36        android:usesCleartextTraffic="true" >
+36-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:17:9-44
+37        <activity
+37-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:18:9-27:20
+38            android:name="com.webchat4.app.MainActivity"
+38-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:19:13-41
+39            android:exported="true"
+39-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:20:13-36
+40            android:theme="@style/AppTheme"
+40-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:21:13-44
+41            android:windowSoftInputMode="adjustResize" >
+41-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:22:13-55
+42            <intent-filter>
+42-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:23:13-26:29
+43                <action android:name="android.intent.action.MAIN" />
+43-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:24:17-69
+43-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:24:25-66
+44
+45                <category android:name="android.intent.category.LAUNCHER" />
+45-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:25:17-77
+45-->/mnt/sdcard/源码/webchat4/android/app/src/main/AndroidManifest.xml:25:27-74
+46            </intent-filter>
+47        </activity>
+48
+49        <provider
+49-->[androidx.emoji2:emoji2:1.2.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/82380c2ef295209c75a147cd78bbfc27/transformed/emoji2-1.2.0/AndroidManifest.xml:24:9-32:20
+50            android:name="androidx.startup.InitializationProvider"
+50-->[androidx.emoji2:emoji2:1.2.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/82380c2ef295209c75a147cd78bbfc27/transformed/emoji2-1.2.0/AndroidManifest.xml:25:13-67
+51            android:authorities="com.webchat4.app.androidx-startup"
+51-->[androidx.emoji2:emoji2:1.2.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/82380c2ef295209c75a147cd78bbfc27/transformed/emoji2-1.2.0/AndroidManifest.xml:26:13-68
+52            android:exported="false" >
+52-->[androidx.emoji2:emoji2:1.2.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/82380c2ef295209c75a147cd78bbfc27/transformed/emoji2-1.2.0/AndroidManifest.xml:27:13-37
+53            <meta-data
+53-->[androidx.emoji2:emoji2:1.2.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/82380c2ef295209c75a147cd78bbfc27/transformed/emoji2-1.2.0/AndroidManifest.xml:29:13-31:52
+54                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+54-->[androidx.emoji2:emoji2:1.2.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/82380c2ef295209c75a147cd78bbfc27/transformed/emoji2-1.2.0/AndroidManifest.xml:30:17-75
+55                android:value="androidx.startup" />
+55-->[androidx.emoji2:emoji2:1.2.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/82380c2ef295209c75a147cd78bbfc27/transformed/emoji2-1.2.0/AndroidManifest.xml:31:17-49
+56            <meta-data
+56-->[androidx.lifecycle:lifecycle-process:2.4.1] /data/data/com.termux/files/home/.gradle/caches/transforms-3/9fe42510bcb7c0257b1988e74b6d9a37/transformed/lifecycle-process-2.4.1/AndroidManifest.xml:31:13-33:52
+57                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+57-->[androidx.lifecycle:lifecycle-process:2.4.1] /data/data/com.termux/files/home/.gradle/caches/transforms-3/9fe42510bcb7c0257b1988e74b6d9a37/transformed/lifecycle-process-2.4.1/AndroidManifest.xml:32:17-78
+58                android:value="androidx.startup" />
+58-->[androidx.lifecycle:lifecycle-process:2.4.1] /data/data/com.termux/files/home/.gradle/caches/transforms-3/9fe42510bcb7c0257b1988e74b6d9a37/transformed/lifecycle-process-2.4.1/AndroidManifest.xml:33:17-49
+59        </provider>
+60    </application>
+61
+62</manifest>

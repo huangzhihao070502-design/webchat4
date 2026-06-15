@@ -1,0 +1,10 @@
+R_DEF: Internal format may change without notice
+local
+id progress_bar
+id splash_layout
+id status_text
+id title_text
+id webview
+layout activity_main
+string app_name
+style AppTheme
