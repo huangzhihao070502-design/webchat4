@@ -489,12 +489,20 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
             if (text.isEmpty() || uid.isEmpty()) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "Missing fields")))
             var ctx = contextTokens[uid].takeIf { !it.isNullOrEmpty() }
             if (ctx == null) {
-                logInfo("SEND", "No token for ${uid.take(12)}, running exhaust...")
-                exhaustMessages()
-                ctx = contextTokens[uid].takeIf { !it.isNullOrEmpty() }
+                logInfo("SEND", "No token for ${uid.take(12)}, running exhaust (with retry)...")
+                // 多重试几次，给 iLink 时间传播新会话的 token
+                for (retry in 0..5) {
+                    exhaustMessages()
+                    ctx = contextTokens[uid].takeIf { !it.isNullOrEmpty() }
+                    if (ctx != null) {
+                        logInfo("SEND", "Token recovered for ${uid.take(12)} after retry $retry")
+                        break
+                    }
+                    Thread.sleep(2000)
+                }
             }
             if (ctx == null) {
-                logErr("SEND", "No session for ${uid.take(12)} after exhaust")
+                logErr("SEND", "No session for ${uid.take(12)} after exhaust (retried)")
                 return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "No session")))
             }
             val clientId = "msg-${System.currentTimeMillis()}-${randomHex(3)}"
@@ -709,11 +717,23 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
                             "confirmed" -> {
                                 afStatus = "confirmed"
                                 val newUid = r.optString("ilink_user_id", "")
-                                logInfo("ADD-FRIEND", "Confirmed uid=${newUid.take(16)} token=${r.optString("context_token","").take(16)}")
+                                val newToken = r.optString("context_token", "")
+                                logInfo("ADD-FRIEND", "Confirmed uid=${newUid.take(16)} token=${newToken.take(16)}")
                                 if (newUid.isNotEmpty() && !contextTokens.containsKey(newUid)) {
-                                    contextTokens[newUid] = ""; saveState()
-                                    logInfo("ADD-FRIEND", "Placed ${newUid.take(16)} starting exhaust")
-                                    threadPool.execute { exhaustMessages() }
+                                    contextTokens[newUid] = newToken; saveState()
+                                    logInfo("ADD-FRIEND", "Placed ${newUid.take(16)} starting exhaust (token=${if (newToken.isEmpty()) "empty" else "ok"})")
+                                    threadPool.execute {
+                                        // 后台持续重试 exhaust 直到 token 取到（最多 60 秒）
+                                        for (i in 0..30) {
+                                            if (contextTokens[newUid]?.isNotEmpty() == true) break
+                                            exhaustMessages()
+                                            if (contextTokens[newUid]?.isNotEmpty() == true) {
+                                                logInfo("ADD-FRIEND", "Token recovered for ${newUid.take(16)} after ${(i+1)*2}s")
+                                                break
+                                            }
+                                            Thread.sleep(2000)
+                                        }
+                                    }
                                 }
                                 break
                             }
@@ -743,7 +763,19 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
             val fileName = j.optString("filename", "file")
             val toUserId = j.optString("to_user_id", "")
             if (fileData.isEmpty() || toUserId.isEmpty()) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "Missing fields")))
-            val ctx = contextTokens[toUserId].takeIf { !it.isNullOrEmpty() }
+            var ctx = contextTokens[toUserId].takeIf { !it.isNullOrEmpty() }
+            if (ctx == null) {
+                logInfo("SEND-MEDIA", "No token for ${toUserId.take(12)}, running exhaust (with retry)...")
+                for (retry in 0..5) {
+                    exhaustMessages()
+                    ctx = contextTokens[toUserId].takeIf { !it.isNullOrEmpty() }
+                    if (ctx != null) {
+                        logInfo("SEND-MEDIA", "Token recovered for ${toUserId.take(12)} after retry $retry")
+                        break
+                    }
+                    Thread.sleep(2000)
+                }
+            }
             if (ctx == null) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "No session")))
             val fileBuf = android.util.Base64.decode(fileData, android.util.Base64.DEFAULT)
             val typeMap = mapOf("image" to 1, "video" to 2, "file" to 3, "voice" to 3)
@@ -818,21 +850,16 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
         return try {
             body.put("base_info", JSONObject(mapOf("channel_version" to "1.0.3")))
             val uin = (Random().nextInt(Int.MAX_VALUE - 1) + 1).toString()
-            val requestBody = body.toString().toAsciiJsonBytes()
-                .toRequestBody("application/json; charset=utf-8".toMediaType())
-            val request = Request.Builder()
-                .url("https://$ILINK_HOST/ilink/bot/$endpoint")
-                .addHeader("AuthorizationType", "ilink_bot_token")
-                .addHeader("Authorization", "Bearer $token")
-                .addHeader("Connection", "close")
-                .addHeader("X-WECHAT-UIN", android.util.Base64.encodeToString(uin.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP))
-                .post(requestBody)
-                .build()
-            val response = okHttp.newCall(request).execute()
-            val respCode = response.code
-            val respBody = response.body?.string() ?: ""
+            val conn = URL("https://$ILINK_HOST/ilink/bot/$endpoint").openConnection() as HttpsURLConnection
+            conn.requestMethod = "POST"
+            conn.doOutput = true
+            conn.connectTimeout = 25000; conn.readTimeout = 25000
+            conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            conn.setRequestProperty("AuthorizationType", "ilink_bot_token")
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            conn.setRequestProperty("Connection", "close")
             conn.setRequestProperty("X-WECHAT-UIN", android.util.Base64.encodeToString(uin.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP))
-            val requestBytes = data.toAsciiJsonBytes()
+            val requestBytes = body.toString().toAsciiJsonBytes()
             conn.setFixedLengthStreamingMode(requestBytes.size)
             conn.outputStream.write(requestBytes)
             val respCode = conn.responseCode
