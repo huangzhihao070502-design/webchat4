@@ -5,7 +5,7 @@ import InputArea from './InputArea';
 
 const API = '';
 
-interface Msg { id: number; text: string; isMine: boolean; time: string; isVoice?: boolean; voiceDuration?: number; voiceUrl?: string; isImage?: boolean; imageData?: string; isFile?: boolean; fileName?: string; isLocation?: boolean; lat?: number; lng?: number; _error?: boolean }
+interface Msg { id: number; text: string; isMine: boolean; time: string; isVoice?: boolean; voiceDuration?: number; voiceUrl?: string; isImage?: boolean; imageData?: string; isFile?: boolean; fileName?: string; isLocation?: boolean; lat?: number; lng?: number; mediaCacheKey?: string; _error?: boolean }
 
 const s = { wrap: { display:'flex', flexDirection:'column' as const, height:'100%', minHeight:0 }, header: { display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid rgba(234,224,213,0.6)', background:'rgba(255,255,255,0.9)', padding:'12px 16px', backdropFilter:'blur(12px)', flexShrink:0 }, msgs: { flex:1, minHeight:0, overflowY:'auto' as const, padding:'16px' } };
 
@@ -28,14 +28,17 @@ export default function ChatPage({ userId }: Props) {
   // ── 消息轮询（每个用户独立实例） ──
   useEffect(() => {
     let lastId = 0;
+    let isMounted = true;
     const poll = setInterval(async () => {
       try {
         const [sRes, uRes, mRes] = await Promise.all([
           fetch(`${API}/api/status`), fetch(`${API}/api/users`), fetch(`${API}/api/messages?since=${lastId}&user=${userId||''}`),
         ]);
+        if (!isMounted) return;
         const sData = await sRes.json(); setConnected(sData.connected);
         // userId 由 Dashboard 通过 prop 传入，不再内部管理
         const mData = await mRes.json();
+        if (!isMounted) return;
         if (mData.messages?.length) {
           for (const m of mData.messages) if (m.id > lastId) lastId = m.id;
           setMsgs(prev => {
@@ -55,7 +58,7 @@ export default function ChatPage({ userId }: Props) {
         }
       } catch {}
     }, 1500);
-    return () => clearInterval(poll);
+    return () => { isMounted = false; clearInterval(poll); };
   }, [userId]);
 
   const addMsg = useCallback((m: Msg) => setMsgs(p => [...p, m]), []);
