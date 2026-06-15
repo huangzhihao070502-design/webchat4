@@ -11,9 +11,10 @@ const s = { wrap: { display:'flex', flexDirection:'column' as const, height:'100
 
 function fmt(t: number) { return new Date(t).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}); }
 
-export default function ChatPage() {
+interface Props { userId?: string | null }
+
+export default function ChatPage({ userId }: Props) {
   const [msgs, setMsgs] = useState<Msg[]>([]);
-  const [userId, setUserId] = useState<string|null>(null);
   const [connected, setConnected] = useState(false);
   const [playingId, setPlayingId] = useState<number|null>(null);
   const [showAddQr, setShowAddQr] = useState(false);
@@ -22,18 +23,9 @@ export default function ChatPage() {
   const endRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement|null>(null);
   const msgIdCounter = useRef(0);
-  const prevUserIdRef = useRef<string|null>(null);
   useEffect(() => { endRef.current?.scrollIntoView({behavior:'smooth'}) }, [msgs]);
 
-  // ── 切换用户时清空旧消息，每个用户独立聊天界面 ──
-  useEffect(() => {
-    if (prevUserIdRef.current !== userId) {
-      setMsgs([]);
-      prevUserIdRef.current = userId;
-    }
-  }, [userId]);
-
-  // ── 消息轮询（每个用户独立） ──
+  // ── 消息轮询（每个用户独立实例） ──
   useEffect(() => {
     let lastId = 0;
     const poll = setInterval(async () => {
@@ -42,9 +34,7 @@ export default function ChatPage() {
           fetch(`${API}/api/status`), fetch(`${API}/api/users`), fetch(`${API}/api/messages?since=${lastId}&user=${userId||''}`),
         ]);
         const sData = await sRes.json(); setConnected(sData.connected);
-        const uData = await uRes.json();
-        if (uData.current_user) setUserId(uData.current_user);
-        else if (uData.users?.length && !userId) setUserId(uData.users[0]);
+        // userId 由 Dashboard 通过 prop 传入，不再内部管理
         const mData = await mRes.json();
         if (mData.messages?.length) {
           for (const m of mData.messages) if (m.id > lastId) lastId = m.id;
@@ -68,14 +58,6 @@ export default function ChatPage() {
     return () => clearInterval(poll);
   }, [userId]);
 
-  // ── 自动获取用户列表 ──
-  useEffect(() => {
-    const t = setInterval(async () => {
-      try { const r = await fetch(`${API}/api/users`); const d = await r.json(); if (d.users?.length && !userId) setUserId(d.users[0]); } catch {}
-    }, 3000);
-    return () => clearInterval(t);
-  }, [userId]);
-
   const addMsg = useCallback((m: Msg) => setMsgs(p => [...p, m]), []);
 
   const playVoice = useCallback((msg: Msg) => {
@@ -86,31 +68,6 @@ export default function ChatPage() {
   }, [playingId]);
   useEffect(() => { return () => { audioRef.current?.pause(); }; }, []);
 
-  // ── 发送消息：每次从服务器取最新 userId → 加入本地 → 发 API → 更新状态 ──
-  const handleSendText = useCallback(async (text: string) => {
-    // 每次发送前从服务器获取最新 current_user，确保切换到正确用户
-    const targetUserId = await getCurrentUserId(null);
-    if (!targetUserId) {
-      addMsg({ id: Date.now(), text: '❌ 未选择联系人', isMine: true, time: fmt(Date.now()), _error: true });
-      return;
-    }
-    // 立即加入本地
-    const localId = ++msgIdCounter.current;
-    addMsg({ id: localId, text, isMine: true, time: fmt(Date.now()) });
-    try {
-      const r = await fetch(`${API}/api/send-text`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text, to_user_id: targetUserId}) });
-      const d = await r.json();
-      if (d.success) {
-        // API 成功：保留本地消息，等待轮询同步服务端消息
-      } else {
-        // API 失败：替换为错误消息
-        setMsgs(p => p.map(m => m.id === localId ? { ...m, text: `❌ 发送失败${d.error ? ': ' + d.error : ''}`, _error: true } : m));
-      }
-    } catch {
-      setMsgs(p => p.map(m => m.id === localId ? { ...m, text: '❌ 发送失败：网络错误', _error: true } : m));
-    }
-  }, [addMsg]);
-
   const toBase64 = async (blob: Blob) => {
     const buf = await blob.arrayBuffer();
     const bytes = new Uint8Array(buf);
@@ -118,7 +75,8 @@ export default function ChatPage() {
     for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
     return btoa(bin);
   };
-  // ── 发送消息：用本地 userId → 发 API → 更新状态 ──
+
+  // ── 发送消息 ──
   const handleSendText = useCallback(async (text: string) => {
     if (!userId) {
       addMsg({ id: Date.now(), text: '❌ 未选择联系人', isMine: true, time: fmt(Date.now()), _error: true });

@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle, User, Settings } from 'lucide-react';
 import ChatPage from './chat/ChatPage';
 import UserPage from './chat/UserPage';
 import SettingsPage from './chat/SettingsPage';
+
+const API = '';
 
 type Tab = 'chat' | 'user' | 'settings';
 interface Props { onLogout: () => void }
@@ -16,6 +18,20 @@ const tabs = [
 
 export default function Dashboard({ onLogout }: Props) {
   const [tab, setTab] = useState<Tab>('chat');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+  // 轮询获取当前选中的用户，传递给 ChatPage 作为独立实例 key
+  useEffect(() => {
+    const t = setInterval(async () => {
+      try {
+        const r = await fetch(`${API}/api/users`);
+        const d = await r.json();
+        if (d.current_user) setCurrentUserId(d.current_user);
+        else if (d.users?.length && !currentUserId) setCurrentUserId(d.users[0]);
+      } catch {}
+    }, 2000);
+    return () => clearInterval(t);
+  }, []);
 
   return (
     <div style={{
@@ -34,7 +50,8 @@ export default function Dashboard({ onLogout }: Props) {
             {tab === 'chat' && (
               <motion.div key="chat" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                <ChatPage />
+                {/* key={currentUserId} 确保每个用户有完全独立的 ChatPage 实例 */}
+                <ChatPage key={currentUserId || 'no-user'} userId={currentUserId} />
               </motion.div>
             )}
             {tab === 'user' && (
