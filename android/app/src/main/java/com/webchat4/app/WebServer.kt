@@ -501,10 +501,9 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
                     Thread.sleep(2000)
                 }
             }
-            if (ctx == null) {
-                logErr("SEND", "No session for ${uid.take(12)} after exhaust (retried)")
-                return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "No session")))
-            }
+            // 所有用户统一用 bot 身份发送，context_token 非必需
+            // 对新用户（无 token），用空串尝试，iLink 可能自动创建会话
+            val useCtx = ctx ?: ""
             val clientId = "msg-${System.currentTimeMillis()}-${randomHex(3)}"
             // 逐层用 .put() 构造 JSON，避免 mapOf 混合类型问题
             val textItem = JSONObject()
@@ -520,7 +519,7 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
             msgObj.put("client_id", clientId)
             msgObj.put("message_type", 2)
             msgObj.put("message_state", 2)
-            msgObj.put("context_token", ctx)
+            msgObj.put("context_token", useCtx)
             msgObj.put("item_list", itemList)
             val msgWrapper = JSONObject()
             msgWrapper.put("msg", msgObj)
@@ -776,7 +775,8 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
                     Thread.sleep(2000)
                 }
             }
-            if (ctx == null) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "No session")))
+            // 统一用 bot 身份发送，context_token 非必需
+            val mediaCtx = ctx ?: ""
             val fileBuf = android.util.Base64.decode(fileData, android.util.Base64.DEFAULT)
             val typeMap = mapOf("image" to 1, "video" to 2, "file" to 3, "voice" to 3)
             val iLinkType = typeMap[mediaType] ?: 3
@@ -797,7 +797,7 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
             val clientId = "msg-${System.currentTimeMillis()}-${randomHex(3)}"
             val msgObj = JSONObject(mapOf(
                 "from_user_id" to "", "to_user_id" to toUserId, "client_id" to clientId,
-                "message_type" to 2, "message_state" to 2, "context_token" to ctx,
+                "message_type" to 2, "message_state" to 2, "context_token" to mediaCtx,
                 "item_list" to JSONArray(listOf(item))
             ))
             val result = ilinkPost("sendmessage", JSONObject(mapOf("msg" to msgObj)), botToken!!)
