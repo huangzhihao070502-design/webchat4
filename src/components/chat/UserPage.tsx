@@ -5,7 +5,7 @@ const API = '';
 
 interface Props { onStartChat?: () => void }
 
-export default function UserPage({ onStartChat }: Props) {
+export default function UserPage({ onSwitchUser }: Props) {
   const [users, setUsers] = useState<string[]>([]);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [showQr, setShowQr] = useState(false);
@@ -26,8 +26,8 @@ export default function UserPage({ onStartChat }: Props) {
   useEffect(() => { loadUsers(); }, [loaded, loadUsers]);
 
   const switchUser = useCallback(async (id: string) => {
-    try { await fetch(`${API}/api/switch-user`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({user_id: id}) }); setCurrentUser(id); loadUsers(); onStartChat?.(); } catch {}
-  }, [loadUsers, onStartChat]);
+    try { await fetch(`${API}/api/switch-user`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({user_id: id}) }); setCurrentUser(id); loadUsers(); onSwitchUser?.(id); } catch {}
+  }, [loadUsers, onSwitchUser]);
 
   const deleteUser = useCallback(async (id: string) => {
     if (!confirm(`确认删除 ${id.slice(0,8)}... 吗？`)) return;

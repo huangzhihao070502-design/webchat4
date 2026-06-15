@@ -18,7 +18,6 @@ const tabs = [
 export default function Dashboard({ onLogout }: Props) {
   const [tab, setTab] = useState<Tab>('chat');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  // 所有活跃用户的 ChatPage 实例（同时存活，切换只控制显示隐藏）
   const [activeChatUsers, setActiveChatUsers] = useState<Set<string>>(new Set());
 
   // 轮询获取用户列表和当前选中用户
@@ -27,21 +26,12 @@ export default function Dashboard({ onLogout }: Props) {
       try {
         const r = await fetch(`${API}/api/users`);
         const d = await r.json();
-        if (d.current_user) {
-          setCurrentUserId(d.current_user);
-          setActiveChatUsers(prev => {
-            if (prev.has(d.current_user)) return prev;
-            return new Set([...prev, d.current_user]);
-          });
-        } else if (d.users?.length && !currentUserId) {
-          const first = d.users[0];
-          setCurrentUserId(first);
-          setActiveChatUsers(prev => {
-            if (prev.has(first)) return prev;
-            return new Set([...prev, first]);
-          });
-        }
-        // 新用户自动加入活跃列表
+        // 函数式更新避免闭包陷阱
+        setCurrentUserId(prev => {
+          if (d.current_user) return d.current_user;
+          if (d.users?.length && !prev) return d.users[0];
+          return prev;
+        });
         if (d.users) {
           setActiveChatUsers(prev => {
             let changed = false;
@@ -57,7 +47,9 @@ export default function Dashboard({ onLogout }: Props) {
     return () => clearInterval(t);
   }, []);
 
-  const handleStartChat = useCallback(() => {
+  // 用户切换：立即更新 currentUserId（不等轮询）
+  const handleSwitchUser = useCallback((userId: string) => {
+    setCurrentUserId(userId);
     setTab('chat');
   }, []);
 
@@ -99,7 +91,7 @@ export default function Dashboard({ onLogout }: Props) {
             display: tab === 'user' ? 'flex' : 'none', flex: 1,
             overflow: 'auto',
           }}>
-            <UserPage onStartChat={handleStartChat} />
+            <UserPage onSwitchUser={handleSwitchUser} />
           </div>
 
           {/* ── 设置 ── */}
