@@ -45,6 +45,8 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
 
     // ── 持久化状态 ──
     private val stateFile = File(context.filesDir, "state.json")
+
+    // 主用户会话（登录二维码建立）
     private var botToken: String? = null
     private var botId: String? = null
     private var botUserId: String? = null
@@ -53,6 +55,20 @@ class WebServer(private val context: Context, private val port: Int = 3001) {
     private var msgId = 0
     private val contextTokens = mutableMapOf<String, String>()
     private val processedMsgIds = mutableSetOf<String>()
+
+    // 子用户会话（添加好友二维码建立，每个用户独立 botToken）
+    private data class SubSession(
+        var botToken: String,
+        val botId: String,
+        val botUserId: String,
+        val messages: MutableList<JSONObject> = mutableListOf(),
+        val contextTokens: MutableMap<String, String> = mutableMapOf(),
+        var cursor: String = "",
+        var msgId: Int = 0,
+        var polling: Boolean = false
+    )
+    private val subSessions = mutableMapOf<String, SubSession>() // key = 用户 UID
+
     private var qrStatus: String = "idle"
     private var qrKey: String? = null
     private var qrContent: String? = null
@@ -477,42 +493,73 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
         val since = params["since"]?.toIntOrNull() ?: 0
         val uf = params["user"] ?: ""
         val arr = JSONArray()
-        messages.filter { it.optInt("id", 0) > since && (uf.isEmpty() || it.optString("from", "") == uf || it.optString("to", "") == uf) }
+        val srcMsgs = if (uf.isNotEmpty()) getMsgsForUser(uf) else messages
+        srcMsgs.filter { it.optInt("id", 0) > since && (uf.isEmpty() || it.optString("from", "") == uf || it.optString("to", "") == uf) }
             .forEach { arr.put(it) }
-        return jsonOk(cors, JSONObject(mapOf("messages" to arr, "current_user" to (currentUserId ?: contextTokens.keys.firstOrNull() ?: ""))))
+        // 补充其他会话的消息（无 user 过滤时返回全部）
+        if (uf.isEmpty()) {
+            subSessions.values.forEach { s -> s.messages.forEach { m -> if (m.optInt("id", 0) > since) arr.put(m) } }
+        }
+        val allUsers = (contextTokens.keys + subSessions.keys).toList()
+        return jsonOk(cors, JSONObject(mapOf("messages" to arr, "current_user" to (currentUserId ?: allUsers.firstOrNull() ?: ""))))
     }
 
     private fun apiSendText(body: String, cors: Map<String, String>): Resp {
-        if (botToken == null) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "Not connected")))
         try {
             val j = JSONObject(body); val text = j.optString("text", ""); val uid = j.optString("to_user_id", "")
             if (text.isEmpty() || uid.isEmpty()) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "Missing fields")))
+
+            // 检查目标用户是否在子会话中
+            val subSession = subSessions[uid]
+            if (subSession != null) {
+                // ── 子会话发送（使用该用户自己的 botToken） ──
+                var ctx = subSession.contextTokens[uid]?.takeIf { it.isNotEmpty() }
+                if (ctx == null) {
+                    logInfo("SEND-SUB", "No token for ${uid.take(12)}, running session exhaust...")
+                    sessionExhaustMessages(uid)
+                    ctx = subSession.contextTokens[uid]?.takeIf { it.isNotEmpty() }
+                }
+                val useCtx = ctx ?: ""
+                val clientId = "msg-${System.currentTimeMillis()}-${randomHex(3)}"
+                val msgObj = JSONObject()
+                msgObj.put("from_user_id", subSession.botUserId)
+                msgObj.put("to_user_id", uid)
+                msgObj.put("client_id", clientId)
+                msgObj.put("message_type", 2)
+                msgObj.put("message_state", 2)
+                msgObj.put("context_token", useCtx)
+                val textItem = JSONObject()
+                textItem.put("type", 1)
+                textItem.put("text_item", JSONObject(mapOf("text" to text)))
+                msgObj.put("item_list", JSONArray(listOf(textItem)))
+                val r = ilinkPost("sendmessage", JSONObject(mapOf("msg" to msgObj)), subSession.botToken)
+                val ok = r != null && r.optInt("ret", 0) != -1 && (r.opt("errcode") == null || r.optInt("errcode", 0) == 0)
+                if (ok) {
+                    subSession.messages.add(JSONObject(mapOf("id" to ++subSession.msgId, "to" to uid, "text" to text, "time" to System.currentTimeMillis(), "dir" to "out")))
+                    logInfo("SEND-SUB", "text='${text.take(30)}' to=${uid.take(12)} ok")
+                } else {
+                    logErr("SEND-SUB", "text='${text.take(30)}' to=${uid.take(12)} FAIL")
+                }
+                return jsonOk(cors, JSONObject(mapOf("success" to ok)))
+            }
+
+            // ── 主会话发送（使用全局 botToken） ──
+            if (botToken == null) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "Not connected")))
             var ctx = contextTokens[uid].takeIf { !it.isNullOrEmpty() }
             if (ctx == null) {
                 logInfo("SEND", "No token for ${uid.take(12)}, running exhaust (with retry)...")
-                // 多重试几次，给 iLink 时间传播新会话的 token
                 for (retry in 0..5) {
                     exhaustMessages()
                     ctx = contextTokens[uid].takeIf { !it.isNullOrEmpty() }
-                    if (ctx != null) {
-                        logInfo("SEND", "Token recovered for ${uid.take(12)} after retry $retry")
-                        break
-                    }
+                    if (ctx != null) { break }
                     Thread.sleep(2000)
                 }
             }
-            // 所有用户统一用 bot 身份发送，context_token 非必需
-            // 对新用户（无 token），用空串尝试，iLink 可能自动创建会话
             val useCtx = ctx ?: ""
             val clientId = "msg-${System.currentTimeMillis()}-${randomHex(3)}"
-            // 逐层用 .put() 构造 JSON，避免 mapOf 混合类型问题
             val textItem = JSONObject()
             textItem.put("type", 1)
-            val textItemContent = JSONObject()
-            textItemContent.put("text", text)
-            textItem.put("text_item", textItemContent)
-            val itemList = JSONArray()
-            itemList.put(textItem)
+            textItem.put("text_item", JSONObject(mapOf("text" to text)))
             val msgObj = JSONObject()
             msgObj.put("from_user_id", botUserId ?: "")
             msgObj.put("to_user_id", uid)
@@ -520,45 +567,26 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
             msgObj.put("message_type", 2)
             msgObj.put("message_state", 2)
             msgObj.put("context_token", useCtx)
-            msgObj.put("item_list", itemList)
-            val msgWrapper = JSONObject()
-            msgWrapper.put("msg", msgObj)
-            val bodyStr = msgWrapper.toString()
-            android.util.Log.i(TAG, "[SEND] Request: uid=${uid.take(8)} ctx=${useCtx.take(8)}... bodyLen=${bodyStr.length}")
-            val r = ilinkPost("sendmessage", msgWrapper, botToken!!)
-            val iLinkRet = r?.optInt("ret", 0) ?: -999
-            val iLinkErr = r?.optString("errmsg", "") ?: "null_response"
-            val iLinkHttp = r?.optInt("httpCode", 0) ?: 0
-            val ok = r != null && iLinkRet != -1 && (r.opt("errcode") == null || r.optInt("errcode", 0) == 0)
+            msgObj.put("item_list", JSONArray(listOf(textItem)))
+            val r = ilinkPost("sendmessage", JSONObject(mapOf("msg" to msgObj)), botToken!!)
+            val ok = r != null && r.optInt("ret", 0) != -1 && (r.opt("errcode") == null || r.optInt("errcode", 0) == 0)
             if (ok) {
-                logInfo("SEND", "text='${text.take(30)}' to=${uid.take(12)} ok ret=$iLinkRet")
+                messages.add(JSONObject(mapOf("id" to ++msgId, "to" to uid, "text" to text, "time" to System.currentTimeMillis(), "dir" to "out")))
+                logInfo("SEND", "text='${text.take(30)}' to=${uid.take(12)} ok")
             } else {
-                logErr("SEND", "text='${text.take(30)}' to=${uid.take(12)} FAIL ret=$iLinkRet err=$iLinkErr http=$iLinkHttp")
+                logErr("SEND", "text='${text.take(30)}' to=${uid.take(12)} FAIL")
             }
-            if (ok) {
-                val msgEntry = JSONObject()
-                msgEntry.put("id", ++msgId)
-                msgEntry.put("to", uid)
-                msgEntry.put("text", text)
-                msgEntry.put("time", System.currentTimeMillis())
-                msgEntry.put("dir", "out")
-                messages.add(msgEntry)
-            }
-            val resp = JSONObject()
-            resp.put("success", ok)
-            resp.put("debug", "ret=$iLinkRet err=$iLinkErr http=$iLinkHttp")
-            return jsonOk(cors, resp)
+            return jsonOk(cors, JSONObject(mapOf("success" to ok)))
         } catch (e: Exception) {
             android.util.Log.e(TAG, "apiSendText error: ${e.message}", e)
-            val resp = JSONObject()
-            resp.put("success", false)
-            resp.put("error", e.message)
-            return jsonOk(cors, resp)
+            return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to e.message)))
         }
     }
 
-    private fun apiUsers(cors: Map<String, String>): Resp =
-        jsonOk(cors, JSONObject(mapOf("users" to JSONArray(contextTokens.keys.toList()), "current_user" to (currentUserId ?: contextTokens.keys.firstOrNull() ?: ""))))
+    private fun apiUsers(cors: Map<String, String>): Resp {
+        val allUsers = (contextTokens.keys + subSessions.keys).toList()
+        return jsonOk(cors, JSONObject(mapOf("users" to JSONArray(allUsers), "current_user" to (currentUserId ?: allUsers.firstOrNull() ?: ""))))
+    }
 
     private fun apiSwitchUser(body: String, cors: Map<String, String>): Resp = try {
         val j = JSONObject(body); val uid = j.optString("user_id", "")
@@ -570,6 +598,8 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
         try {
             val uid = JSONObject(body).optString("user_id", "")
             contextTokens.remove(uid)
+            subSessions[uid]?.polling = false // 停止子会话轮询
+            subSessions.remove(uid)
             if (currentUserId == uid) currentUserId = null
             saveState()
         } catch (_: Exception) {}
@@ -716,21 +746,35 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
                             "confirmed" -> {
                                 afStatus = "confirmed"
                                 val newUid = r.optString("ilink_user_id", "")
-                                val newToken = r.optString("context_token", "")
-                                logInfo("ADD-FRIEND", "Confirmed uid=${newUid.take(16)} token=${newToken.take(16)}")
-                                if (newUid.isNotEmpty() && !contextTokens.containsKey(newUid)) {
-                                    contextTokens[newUid] = newToken; saveState()
-                                    logInfo("ADD-FRIEND", "Placed ${newUid.take(16)} starting exhaust (token=${if (newToken.isEmpty()) "empty" else "ok"})")
-                                    threadPool.execute {
-                                        // 后台持续重试 exhaust 直到 token 取到（最多 60 秒）
-                                        for (i in 0..30) {
-                                            if (contextTokens[newUid]?.isNotEmpty() == true) break
-                                            exhaustMessages()
-                                            if (contextTokens[newUid]?.isNotEmpty() == true) {
-                                                logInfo("ADD-FRIEND", "Token recovered for ${newUid.take(16)} after ${(i+1)*2}s")
-                                                break
+                                val newBotToken = r.optString("bot_token", "")
+                                val newBotId = r.optString("ilink_bot_id", "")
+                                val newCtxToken = r.optString("context_token", "")
+                                logInfo("ADD-FRIEND", "Confirmed uid=${newUid.take(16)} bot_token=${newBotToken.take(16)} ctx=${newCtxToken.take(16)}")
+                                if (newUid.isEmpty()) break
+                                // 方案A：新用户有自己的独立 bot_token → 创建完整独立会话
+                                if (newBotToken.isNotEmpty()) {
+                                    val session = SubSession(
+                                        botToken = newBotToken,
+                                        botId = newBotId,
+                                        botUserId = newUid
+                                    )
+                                    if (newCtxToken.isNotEmpty()) session.contextTokens[newUid] = newCtxToken
+                                    subSessions[newUid] = session
+                                    logInfo("ADD-FRIEND", "New independent session for ${newUid.take(16)}")
+                                    // 启动独立消息轮询（复制主用户逻辑）
+                                    threadPool.execute { sessionExhaustMessages(newUid); sessionPollMessages(newUid) }
+                                } else {
+                                    // 方案B：无独立 bot_token → 加入主会话 + 重试 token
+                                    logInfo("ADD-FRIEND", "No bot_token, using shared session for ${newUid.take(16)}")
+                                    if (!contextTokens.containsKey(newUid)) {
+                                        contextTokens[newUid] = newCtxToken; saveState()
+                                        threadPool.execute {
+                                            for (i in 0..30) {
+                                                if (contextTokens[newUid]?.isNotEmpty() == true) break
+                                                exhaustMessages()
+                                                if (contextTokens[newUid]?.isNotEmpty() == true) break
+                                                Thread.sleep(2000)
                                             }
-                                            Thread.sleep(2000)
                                         }
                                     }
                                 }
@@ -754,7 +798,6 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
     // ═══════════════════════════════════════════════
 
     private fun apiSendMedia(body: String, cors: Map<String, String>): Resp {
-        if (botToken == null) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "Not connected")))
         return try {
             val j = JSONObject(body)
             val mediaType = j.optString("media_type", "image")
@@ -762,50 +805,52 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
             val fileName = j.optString("filename", "file")
             val toUserId = j.optString("to_user_id", "")
             if (fileData.isEmpty() || toUserId.isEmpty()) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "Missing fields")))
+
+            // 检查目标用户是否在子会话中
+            val subSession = subSessions[toUserId]
+            if (subSession != null) {
+                var ctx = subSession.contextTokens[toUserId]?.takeIf { it.isNotEmpty() }
+                if (ctx == null) { sessionExhaustMessages(toUserId); ctx = subSession.contextTokens[toUserId]?.takeIf { it.isNotEmpty() } }
+                val mediaCtx = ctx ?: ""
+                val fileBuf = android.util.Base64.decode(fileData, android.util.Base64.DEFAULT)
+                val iLinkType = mapOf("image" to 1, "video" to 2, "file" to 3, "voice" to 3)[mediaType] ?: 3
+                val fn = if (mediaType == "voice") fileName.replace(Regex("\\.\\w+$"), "") + ".mp3" else fileName
+                val uploaded = uploadMedia(fileBuf, fn, iLinkType, toUserId)
+                if (uploaded == null) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "Upload failed")))
+                val cdnMedia = uploaded.optJSONObject("media") ?: return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "No media object")))
+                val item = when (mediaType) {
+                    "image" -> JSONObject(mapOf("type" to 2, "image_item" to JSONObject(mapOf("media" to cdnMedia, "aeskey" to uploaded.optString("aes_key_hex",""), "mid_size" to uploaded.optInt("encrypted_size",0)))))
+                    "voice" -> JSONObject(mapOf("type" to 3, "voice_item" to JSONObject(mapOf("media" to cdnMedia, "encode_type" to 6, "bits_per_sample" to 16, "sample_rate" to 16000, "playtime" to 2000))))
+                    else -> JSONObject(mapOf("type" to 4, "file_item" to JSONObject(mapOf("media" to cdnMedia, "file_name" to fn, "md5" to uploaded.optString("md5",""), "len" to uploaded.optInt("raw_size",0).toString()))))
+                }
+                val msgObj = JSONObject(mapOf("from_user_id" to subSession.botUserId, "to_user_id" to toUserId, "client_id" to "msg-${System.currentTimeMillis()}-${randomHex(3)}", "message_type" to 2, "message_state" to 2, "context_token" to mediaCtx, "item_list" to JSONArray(listOf(item))))
+                val result = ilinkPost("sendmessage", JSONObject(mapOf("msg" to msgObj)), subSession.botToken)
+                val ok = result != null && result.optInt("ret", 0) != -1 && (result.opt("errcode") == null || result.optInt("errcode", 0) == 0)
+                if (ok) subSession.messages.add(JSONObject(mapOf("id" to ++subSession.msgId, "to" to toUserId, "text" to "[${mediaType}] ${fn}", "time" to System.currentTimeMillis(), "dir" to "out")))
+                return jsonOk(cors, JSONObject(mapOf("success" to ok)))
+            }
+
+            // ── 主会话发送 ──
+            if (botToken == null) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "Not connected")))
             var ctx = contextTokens[toUserId].takeIf { !it.isNullOrEmpty() }
             if (ctx == null) {
-                logInfo("SEND-MEDIA", "No token for ${toUserId.take(12)}, running exhaust (with retry)...")
-                for (retry in 0..5) {
-                    exhaustMessages()
-                    ctx = contextTokens[toUserId].takeIf { !it.isNullOrEmpty() }
-                    if (ctx != null) {
-                        logInfo("SEND-MEDIA", "Token recovered for ${toUserId.take(12)} after retry $retry")
-                        break
-                    }
-                    Thread.sleep(2000)
-                }
+                for (retry in 0..5) { exhaustMessages(); ctx = contextTokens[toUserId].takeIf { !it.isNullOrEmpty() }; if (ctx != null) break; Thread.sleep(2000) }
             }
-            // 统一用 bot 身份发送，context_token 非必需
             val mediaCtx = ctx ?: ""
             val fileBuf = android.util.Base64.decode(fileData, android.util.Base64.DEFAULT)
-            val typeMap = mapOf("image" to 1, "video" to 2, "file" to 3, "voice" to 3)
-            val iLinkType = typeMap[mediaType] ?: 3
-            val finalFilename = if (mediaType == "voice") fileName.replace(Regex("\\.\\w+$"), "") + ".mp3" else fileName
-            val uploaded = uploadMedia(fileBuf, finalFilename, iLinkType, toUserId)
+            val iLinkType = mapOf("image" to 1, "video" to 2, "file" to 3, "voice" to 3)[mediaType] ?: 3
+            val fn = if (mediaType == "voice") fileName.replace(Regex("\\.\\w+$"), "") + ".mp3" else fileName
+            val uploaded = uploadMedia(fileBuf, fn, iLinkType, toUserId)
             if (uploaded == null) return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "Upload failed")))
             val cdnMedia = uploaded.optJSONObject("media") ?: return jsonOk(cors, JSONObject(mapOf("success" to false, "error" to "No media object")))
-            val aesKeyHex = uploaded.optString("aes_key_hex", "")
             val item = when (mediaType) {
-                "image" -> JSONObject(mapOf("type" to 2, "image_item" to JSONObject(mapOf(
-                    "media" to cdnMedia, "aeskey" to aesKeyHex, "mid_size" to uploaded.optInt("encrypted_size", 0)))))
-                "voice" -> JSONObject(mapOf("type" to 3, "voice_item" to JSONObject(mapOf(
-                    "media" to cdnMedia, "encode_type" to 6, "bits_per_sample" to 16, "sample_rate" to 16000, "playtime" to 2000))))
-                else -> JSONObject(mapOf("type" to 4, "file_item" to JSONObject(mapOf(
-                    "media" to cdnMedia, "file_name" to finalFilename, "md5" to uploaded.optString("md5", ""),
-                    "len" to uploaded.optInt("raw_size", 0).toString()))))
+                "image" -> JSONObject(mapOf("type" to 2, "image_item" to JSONObject(mapOf("media" to cdnMedia, "aeskey" to uploaded.optString("aes_key_hex",""), "mid_size" to uploaded.optInt("encrypted_size",0)))))
+                "voice" -> JSONObject(mapOf("type" to 3, "voice_item" to JSONObject(mapOf("media" to cdnMedia, "encode_type" to 6, "bits_per_sample" to 16, "sample_rate" to 16000, "playtime" to 2000))))
+                else -> JSONObject(mapOf("type" to 4, "file_item" to JSONObject(mapOf("media" to cdnMedia, "file_name" to fn, "md5" to uploaded.optString("md5",""), "len" to uploaded.optInt("raw_size",0).toString()))))
             }
-            val clientId = "msg-${System.currentTimeMillis()}-${randomHex(3)}"
-            val msgObj = JSONObject(mapOf(
-                "from_user_id" to "", "to_user_id" to toUserId, "client_id" to clientId,
-                "message_type" to 2, "message_state" to 2, "context_token" to mediaCtx,
-                "item_list" to JSONArray(listOf(item))
-            ))
-            val result = ilinkPost("sendmessage", JSONObject(mapOf("msg" to msgObj)), botToken!!)
+            val result = ilinkPost("sendmessage", JSONObject(mapOf("msg" to JSONObject(mapOf("from_user_id" to (botUserId?:""), "to_user_id" to toUserId, "client_id" to "msg-${System.currentTimeMillis()}-${randomHex(3)}", "message_type" to 2, "message_state" to 2, "context_token" to mediaCtx, "item_list" to JSONArray(listOf(item)))))), botToken!!)
             val ok = result != null && result.optInt("ret", 0) != -1 && (result.opt("errcode") == null || result.optInt("errcode", 0) == 0)
-            if (ok) {
-                messages.add(JSONObject(mapOf("id" to ++msgId, "to" to toUserId, "text" to "[${mediaType}] ${finalFilename}",
-                    "time" to System.currentTimeMillis(), "dir" to "out")))
-            }
+            if (ok) messages.add(JSONObject(mapOf("id" to ++msgId, "to" to toUserId, "text" to "[${mediaType}] ${fn}", "time" to System.currentTimeMillis(), "dir" to "out")))
             jsonOk(cors, JSONObject(mapOf("success" to ok)))
         } catch (e: Exception) { jsonOk(cors, JSONObject(mapOf("success" to false, "error" to e.message))) }
     }
@@ -921,6 +966,133 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
             }
             pollingQr = false
         }
+    }
+
+    // ═══════════════════════════════════════════════
+    //  多会话工具函数
+    // ═══════════════════════════════════════════════
+
+    /** 获取用户所属会话（子会话优先） */
+    private fun getSession(uid: String): SubSession? = subSessions[uid]
+
+    /** 获取用户会话的 context_token */
+    private fun getCtxForUser(uid: String): String? =
+        subSessions[uid]?.contextTokens?.get(uid)?.takeIf { it.isNotEmpty() }
+            ?: contextTokens[uid]?.takeIf { it.isNotEmpty() }
+
+    /** 获取用户会话的消息列表 */
+    private fun getMsgsForUser(uid: String): MutableList<JSONObject> =
+        subSessions[uid]?.messages ?: messages
+
+    /** 子会话：一次性拉取 pending 消息 */
+    private fun sessionExhaustMessages(sessionUid: String) {
+        val s = subSessions[sessionUid] ?: return
+        if (s.botToken.isEmpty()) return
+        var localCursor = s.cursor
+        for (i in 0 until 10) {
+            try {
+                val r = ilinkPost("getupdates", JSONObject(mapOf("get_updates_buf" to localCursor)), s.botToken)
+                if (r == null) break
+                if (r.optInt("ret", 0) == -1) break
+                if (r.has("get_updates_buf")) localCursor = r.optString("get_updates_buf", "")
+                val msgs = r.optJSONArray("msgs") ?: break
+                processSubSessionMessages(sessionUid, msgs)
+                if (msgs.length() == 0) break
+            } catch (_: Exception) { break }
+        }
+        if (localCursor > s.cursor) { s.cursor = localCursor }
+    }
+
+    /** 子会话：持续轮询消息 */
+    private fun sessionPollMessages(sessionUid: String) {
+        val s = subSessions[sessionUid] ?: return
+        if (s.polling) return; s.polling = true
+        while (s.polling && s.botToken.isNotEmpty()) {
+            try {
+                val r = ilinkPost("getupdates", JSONObject(mapOf("get_updates_buf" to s.cursor)), s.botToken)
+                if (r != null && r.optInt("ret", 0) != -1) {
+                    if (r.has("get_updates_buf")) s.cursor = r.optString("get_updates_buf", "")
+                    val msgs = r.optJSONArray("msgs") ?: JSONArray()
+                    processSubSessionMessages(sessionUid, msgs)
+                }
+            } catch (_: Exception) {}
+            try { Thread.sleep(2000) } catch (_: Exception) { break }
+        }
+        s.polling = false
+    }
+
+    /** 处理子会话的原始消息 */
+    private fun processSubSessionMessages(sessionUid: String, msgs: JSONArray) {
+        val s = subSessions[sessionUid] ?: return
+        for (i in 0 until msgs.length()) {
+            try {
+                val m = msgs.getJSONObject(i)
+                val fu = m.optString("from_user_id", "")
+                val ct = m.optString("context_token", "")
+                if (fu.isNotEmpty() && ct.isNotEmpty() && (s.contextTokens[fu]?.isEmpty() != false)) {
+                    s.contextTokens[fu] = ct
+                    logInfo("SUB-TOKEN", "Session ${sessionUid.take(8)} updated for ${fu.take(12)}")
+                }
+                var msgText = ""
+                val items = m.optJSONArray("item_list") ?: JSONArray()
+                for (j in 0 until items.length()) {
+                    val item = items.getJSONObject(j)
+                    if (item.has("text_item")) msgText = item.optJSONObject("text_item")?.optString("text", "") ?: ""
+                }
+                if (msgText.isNotEmpty()) {
+                    val msgObj = JSONObject(mapOf(
+                        "id" to ++s.msgId, "from" to fu, "text" to msgText,
+                        "time" to System.currentTimeMillis(), "dir" to "in"
+                    ))
+                    s.messages.add(msgObj)
+                    if (msgText.isNotEmpty() && fu.isNotEmpty()) {
+                        sessionAutoReply(sessionUid, fu, msgText)
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    /** 子会话 AI 自动回复 */
+    private fun sessionAutoReply(sessionUid: String, toUser: String, userMsg: String) {
+        val s = subSessions[sessionUid] ?: return
+        try {
+            val cfg = loadAiConfig()
+            if (!cfg.optBoolean("enabled", false) || !cfg.has("api_url") || !cfg.has("api_key") || !cfg.has("model")) return
+            val ctx = s.contextTokens[toUser] ?: return
+            val pMap = try { JSONObject(personaMapFile.readText()) } catch (_: Exception) { JSONObject() }
+            val pid = pMap.optString(toUser, "")
+            val persona = if (pid.isNotEmpty()) loadPersonas().optJSONObject(pid) else null
+            var sp = cfg.optString("prompt", "")
+            if (persona != null) {
+                val skills = persona.optJSONArray("skills")
+                if (skills != null) {
+                    val skillIds = (0 until skills.length()).map { skills.getString(it) }
+                    val skillPrompt = buildSkillPrompt(skillIds)
+                    if (skillPrompt.isNotEmpty()) sp = skillPrompt + "\n\n" + sp
+                }
+            }
+            val req = JSONObject(mapOf(
+                "model" to cfg.optString("model", "gpt-3.5-turbo"),
+                "messages" to JSONArray(listOf(
+                    JSONObject(mapOf("role" to "system", "content" to sp)),
+                    JSONObject(mapOf("role" to "user", "content" to userMsg))
+                ))
+            ))
+            val mt = cfg.optInt("token_limit", 0)
+            if (mt > 0) req.put("max_tokens", mt)
+            val url = cfg.optString("api_url", "").trimEnd('/') + "/chat/completions"
+            val r = httpsPost(url, cfg.optString("api_key", ""), req.toString()) ?: return
+            val reply = r.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")?.optString("content", "") ?: return
+            val clientId = "ai-${Date().time.toString(36)}"
+            val replyMsg = JSONObject(mapOf(
+                "from_user_id" to "", "to_user_id" to toUser, "client_id" to clientId,
+                "message_type" to 2, "message_state" to 2, "context_token" to ctx,
+                "item_list" to JSONArray(listOf(JSONObject(mapOf("type" to 1, "text_item" to JSONObject(mapOf("text" to reply)))))
+            )))
+            ilinkPost("sendmessage", JSONObject(mapOf("msg" to replyMsg)), s.botToken)
+            s.messages.add(JSONObject(mapOf("id" to ++s.msgId, "to" to toUser, "text" to reply, "time" to System.currentTimeMillis(), "dir" to "out")))
+        } catch (_: Exception) {}
     }
 
     // ═══════════════════════════════════════════════
