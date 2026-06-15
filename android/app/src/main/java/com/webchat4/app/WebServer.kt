@@ -524,7 +524,7 @@ private val MIME = mapOf("html" to "text/html", "js" to "text/javascript", "css"
             val msgWrapper = JSONObject()
             msgWrapper.put("msg", msgObj)
             val bodyStr = msgWrapper.toString()
-            android.util.Log.i(TAG, "[SEND] Request: uid=${uid.take(8)} ctx=${ctx.take(8)}... bodyLen=${bodyStr.length}")
+            android.util.Log.i(TAG, "[SEND] Request: uid=${uid.take(8)} ctx=${useCtx.take(8)}... bodyLen=${bodyStr.length}")
             val r = ilinkPost("sendmessage", msgWrapper, botToken!!)
             val iLinkRet = r?.optInt("ret", 0) ?: -999
             val iLinkErr = r?.optString("errmsg", "") ?: "null_response"
