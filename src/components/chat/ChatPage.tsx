@@ -22,9 +22,18 @@ export default function ChatPage() {
   const endRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement|null>(null);
   const msgIdCounter = useRef(0);
+  const prevUserIdRef = useRef<string|null>(null);
   useEffect(() => { endRef.current?.scrollIntoView({behavior:'smooth'}) }, [msgs]);
 
-  // ── 消息轮询（不再清空 msgs） ──
+  // ── 切换用户时清空旧消息，每个用户独立聊天界面 ──
+  useEffect(() => {
+    if (prevUserIdRef.current !== userId) {
+      setMsgs([]);
+      prevUserIdRef.current = userId;
+    }
+  }, [userId]);
+
+  // ── 消息轮询（每个用户独立） ──
   useEffect(() => {
     let lastId = 0;
     const poll = setInterval(async () => {
@@ -77,9 +86,11 @@ export default function ChatPage() {
   }, [playingId]);
   useEffect(() => { return () => { audioRef.current?.pause(); }; }, []);
 
-  // ── 发送消息：加入本地 → 发 API → 更新状态 ──
+  // ── 发送消息：每次从服务器取最新 userId → 加入本地 → 发 API → 更新状态 ──
   const handleSendText = useCallback(async (text: string) => {
-    if (!userId) {
+    // 每次发送前从服务器获取最新 current_user，确保切换到正确用户
+    const targetUserId = await getCurrentUserId(null);
+    if (!targetUserId) {
       addMsg({ id: Date.now(), text: '❌ 未选择联系人', isMine: true, time: fmt(Date.now()), _error: true });
       return;
     }
@@ -87,7 +98,7 @@ export default function ChatPage() {
     const localId = ++msgIdCounter.current;
     addMsg({ id: localId, text, isMine: true, time: fmt(Date.now()) });
     try {
-      const r = await fetch(`${API}/api/send-text`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text, to_user_id: userId}) });
+      const r = await fetch(`${API}/api/send-text`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text, to_user_id: targetUserId}) });
       const d = await r.json();
       if (d.success) {
         // API 成功：保留本地消息，等待轮询同步服务端消息
@@ -98,7 +109,7 @@ export default function ChatPage() {
     } catch {
       setMsgs(p => p.map(m => m.id === localId ? { ...m, text: '❌ 发送失败：网络错误', _error: true } : m));
     }
-  }, [userId, addMsg]);
+  }, [addMsg]);
 
   const toBase64 = async (blob: Blob) => {
     const buf = await blob.arrayBuffer();
@@ -107,22 +118,32 @@ export default function ChatPage() {
     for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
     return btoa(bin);
   };
+  /** 获取最新 current_user（确保发送给正确的用户） */
+  const getCurrentUserId = useCallback(async (fallback: string|null): Promise<string|null> => {
+    try {
+      const r = await fetch(`${API}/api/users`); const d = await r.json();
+      if (d.current_user) return d.current_user;
+    } catch {}
+    return fallback;
+  }, []);
   const handleSendVoice = async (blob?: Blob) => {
-    if (!blob || !userId) return;
+    const uid = await getCurrentUserId(null);
+    if (!blob || !uid) return;
     const localId = ++msgIdCounter.current;
     addMsg({ id:localId, text:`[语音] voice.mp3 (${(blob.size/1024).toFixed(1)}KB)`, isMine:true, time:fmt(Date.now()), isFile:true, fileName:'voice.mp3' });
     try {
-      const r = await fetch(`${API}/api/send-media`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({media_type:'voice', file_data:await toBase64(blob), filename:'voice.webm', to_user_id: userId}) });
+      const r = await fetch(`${API}/api/send-media`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({media_type:'voice', file_data:await toBase64(blob), filename:'voice.webm', to_user_id: uid}) });
       const d = await r.json();
       if (!d.success) setMsgs(p => p.map(m => m.id === localId ? { ...m, text: '❌ 语音发送失败', _error: true } : m));
     } catch { setMsgs(p => p.map(m => m.id === localId ? { ...m, text: '❌ 语音发送失败', _error: true } : m)); }
   };
   const handleSendImage = async (file: File) => {
-    if (!userId) return;
+    const uid = await getCurrentUserId(null);
+    if (!uid) return;
     const localId = ++msgIdCounter.current;
     addMsg({id:localId,text:'[图片发送中...]',isMine:true,time:fmt(Date.now())});
     try {
-      const r = await fetch(`${API}/api/send-media`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({media_type:'image', file_data:await toBase64(file), filename:file.name, to_user_id: userId}) });
+      const r = await fetch(`${API}/api/send-media`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({media_type:'image', file_data:await toBase64(file), filename:file.name, to_user_id: uid}) });
       const d = await r.json();
       if (d.success) {
         const reader = new FileReader();
@@ -134,22 +155,24 @@ export default function ChatPage() {
     } catch { setMsgs(p => p.map(m => m.id === localId ? { ...m, text: '❌ 图片发送失败', _error: true } : m)); }
   };
   const handleSendFile = async (file: File) => {
-    if (!userId) return;
+    const uid = await getCurrentUserId(null);
+    if (!uid) return;
     const localId = ++msgIdCounter.current;
     addMsg({id:localId,text:`${file.name} (${(file.size/1024).toFixed(1)}KB)`,isMine:true,time:fmt(Date.now()),isFile:true,fileName:file.name});
     try {
-      const r = await fetch(`${API}/api/send-media`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({media_type:'file', file_data:await toBase64(file), filename:file.name, to_user_id: userId}) });
+      const r = await fetch(`${API}/api/send-media`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({media_type:'file', file_data:await toBase64(file), filename:file.name, to_user_id: uid}) });
       const d = await r.json();
       if (!d.success) setMsgs(p => p.map(m => m.id === localId ? { ...m, text: '❌ 文件发送失败', _error: true } : m));
     } catch { setMsgs(p => p.map(m => m.id === localId ? { ...m, text: '❌ 文件发送失败', _error: true } : m)); }
   };
   const handleSendLocation = async (lat: number, lng: number) => {
-    if (!userId) return;
+    const uid = await getCurrentUserId(null);
+    if (!uid) return;
     const localId = ++msgIdCounter.current;
     const text = `位置: https://maps.google.com/?q=${lat},${lng}`;
     addMsg({id:localId,text,isMine:true,time:fmt(Date.now()),isLocation:true,lat,lng});
     try {
-      const r = await fetch(`${API}/api/send-text`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text, to_user_id: userId}) });
+      const r = await fetch(`${API}/api/send-text`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text, to_user_id: uid}) });
       const d = await r.json();
       if (!d.success) setMsgs(p => p.map(m => m.id === localId ? { ...m, text: '❌ 位置发送失败', _error: true } : m));
     } catch { setMsgs(p => p.map(m => m.id === localId ? { ...m, text: '❌ 位置发送失败', _error: true } : m)); }
