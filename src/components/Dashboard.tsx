@@ -89,7 +89,7 @@ export default function Dashboard({ onLogout }: Props) {
           {/* ── 用户管理 ── */}
           <div style={{
             display: tab === 'user' ? 'flex' : 'none', flex: 1,
-            overflow: 'auto',
+            overflow: 'auto', width: '100%', flexDirection: 'column',
           }}>
             <UserPage onSwitchUser={handleSwitchUser} />
           </div>
@@ -97,7 +97,7 @@ export default function Dashboard({ onLogout }: Props) {
           {/* ── 设置 ── */}
           <div style={{
             display: tab === 'settings' ? 'flex' : 'none', flex: 1,
-            overflow: 'auto',
+            overflow: 'auto', width: '100%', flexDirection: 'column',
           }}>
             <SettingsPage onLogout={onLogout} />
           </div>
