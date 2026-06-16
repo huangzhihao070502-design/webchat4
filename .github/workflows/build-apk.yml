@@ -52,21 +52,23 @@ jobs:
         gradle-version: '8.6'
 
     - name: Grant execute permission
-      run: chmod +x gradlew || true
+      run: chmod +x android/gradlew || true
     - name: Build Debug APK
-      run: gradle assembleDebug --stacktrace --no-daemon
+      run: |
+        cd android
+        gradle assembleDebug --stacktrace --no-daemon
 
     - name: Find APK
       run: |
         echo "=== Build outputs ==="
-        find app/build/outputs -name "*.apk" 2>/dev/null || echo "No APK found"
+        find android/app/build/outputs -name "*.apk" 2>/dev/null || echo "No APK found"
         echo "=== Build directory ==="
-        ls -la app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug dir not found" 
+        ls -la android/app/build/outputs/apk/debug/ 2>/dev/null || echo "Debug dir not found"
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: WebChat4-debug
         path: |
-          app/build/outputs/apk/debug/*.apk
-          app/build/outputs/apk/**/*.apk
+          android/app/build/outputs/apk/debug/*.apk
+          android/app/build/outputs/apk/**/*.apk
         retention-days: 30
