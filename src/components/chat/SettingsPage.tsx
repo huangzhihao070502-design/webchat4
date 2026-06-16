@@ -99,7 +99,7 @@ export default function SettingsPage({ onLogout }: Props) {
         <div className="w-full px-4 py-6 sm:px-5 sm:py-8 lg:px-6">
           <PageHeader title="AI 自动回复" onBack={() => setPage("main")} />
           <Card className="mb-4">
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setAiCfg(p => ({ ...p, enabled: !p.enabled }))}>
+            <div className="flex items-center gap-3">
               <Toggle enabled={aiCfg.enabled} onToggle={() => setAiCfg(p => ({ ...p, enabled: !p.enabled }))} />
               <span className="text-sm font-medium text-[#3E2723] sm:text-[15px]">启用 AI 自动回复</span>
             </div>
@@ -139,7 +139,7 @@ export default function SettingsPage({ onLogout }: Props) {
             </div>
           </Card>
           <Card className="mb-4">
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setAiCfg(p => ({ ...p, scheduled_reply: !p.scheduled_reply }))}>
+            <div className="flex items-center gap-3">
               <Toggle enabled={aiCfg.scheduled_reply} onToggle={() => setAiCfg(p => ({ ...p, scheduled_reply: !p.scheduled_reply }))} />
               <span className="text-sm font-medium text-[#3E2723] sm:text-[15px]">定时主动发送消息</span>
             </div>

@@ -131,6 +131,29 @@ const contextTokens = {};
 const messages = [];
 let msgId = 0;
 
+// ---- Add-friend state (must be at module level to persist across requests) ----
+let addFriendKey = null, addFriendStatus = 'idle', addFriendTimer = null;
+let currentUserId = null;
+function startAddFriendPolling(key) {
+  if (addFriendTimer) clearInterval(addFriendTimer);
+  addFriendKey = key; addFriendStatus = 'waiting';
+  addFriendTimer = setInterval(async () => {
+    try {
+      const data = await ilinkGet(`/ilink/bot/get_qrcode_status?qrcode=${key}`, { 'iLink-App-ClientVersion': '1' });
+      if (data.status === 'confirmed') {
+        addFriendStatus = 'confirmed';
+        clearInterval(addFriendTimer); addFriendTimer = null;
+        if (data.ilink_user_id && !contextTokens[data.ilink_user_id]) {
+          contextTokens[data.ilink_user_id] = '';
+          saveState();
+          console.log(`[ADD-FRIEND] New user added: ${(data.ilink_user_id||'').slice(0,16)}`);
+        }
+        exhaustMessages();
+      } else if (data.status === 'expired') { addFriendStatus = 'expired'; clearInterval(addFriendTimer); addFriendTimer = null; }
+    } catch {}
+  }, 2000);
+}
+
 function saveState() {
   try { fs.writeFileSync(STATE_FILE, JSON.stringify({ botToken, botId, botUserId, cursor, contextTokens, messages, msgId })); } catch {}
 }
@@ -607,29 +630,6 @@ http.createServer((req, res) => {
 
   const url = new URL(req.url, `http://localhost:${FRONT_PORT}`);
   const p = url.pathname;
-
-  // Shared state
-  let addFriendKey = null, addFriendStatus = 'idle', addFriendTimer = null;
-  let currentUserId = null;
-  function startAddFriendPolling(key) {
-    if (addFriendTimer) clearInterval(addFriendTimer);
-    addFriendKey = key; addFriendStatus = 'waiting';
-    addFriendTimer = setInterval(async () => {
-      try {
-        const data = await ilinkGet(`/ilink/bot/get_qrcode_status?qrcode=${key}`, { 'iLink-App-ClientVersion': '1' });
-        if (data.status === 'confirmed') {
-          addFriendStatus = 'confirmed';
-          clearInterval(addFriendTimer); addFriendTimer = null;
-          if (data.ilink_user_id && !contextTokens[data.ilink_user_id]) {
-            contextTokens[data.ilink_user_id] = '';
-            saveState();
-            console.log(`[ADD-FRIEND] New user added: ${(data.ilink_user_id||'').slice(0,16)}`);
-          }
-          exhaustMessages(); // Get new user context
-        } else if (data.status === 'expired') { addFriendStatus = 'expired'; clearInterval(addFriendTimer); addFriendTimer = null; }
-      } catch {}
-    }, 2000);
-  }
 
   // ---- Routes ----
   // QR code login (bot_type=3)

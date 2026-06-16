@@ -8,3 +8,7 @@
 __pycache__
 node_modules/
 /local.properties
+server/node_modules/
+node_modules/
+dist/
+*.apk
