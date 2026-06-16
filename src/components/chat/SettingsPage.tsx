@@ -96,7 +96,7 @@ export default function SettingsPage({ onLogout }: Props) {
   if (page === "ai") {
     return (
       <div className="flex h-full flex-col overflow-auto bg-[#F7F3EE]">
-        <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        <div className="w-full px-4 py-6 sm:mx-auto sm:max-w-[430px] sm:px-5 sm:py-8 lg:px-6">
           <PageHeader title="AI 自动回复" onBack={() => setPage("main")} />
           <Card className="mb-4">
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => setAiCfg(p => ({ ...p, enabled: !p.enabled }))}>
@@ -159,7 +159,7 @@ export default function SettingsPage({ onLogout }: Props) {
   if (page === "personas") {
     return (
       <div className="flex h-full flex-col overflow-auto bg-[#F7F3EE]">
-        <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        <div className="w-full px-4 py-6 sm:mx-auto sm:max-w-[430px] sm:px-5 sm:py-8 lg:px-6">
           <div className="mb-5 flex items-center justify-between sm:mb-6">
             <div className="flex items-center gap-3"><BackButton onClick={() => setPage("main")} /><h1 className="text-lg font-semibold text-[#3E2723] sm:text-xl">角色卡 <span className="text-sm font-normal text-[#8D6E63]">({personas.length})</span></h1></div>
             <button onClick={() => { setEditingPersona({ name: "", personality: "", style: "", background: "", details: "" }); setPage("personaEdit"); }} className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-r from-[#C89F7E] to-[#B08968] text-white shadow-md transition-all hover:brightness-105">+</button>
@@ -206,7 +206,7 @@ export default function SettingsPage({ onLogout }: Props) {
   if (page === "personaEdit") {
     return (
       <div className="flex h-full flex-col overflow-auto bg-[#F7F3EE]">
-        <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        <div className="w-full px-4 py-6 sm:mx-auto sm:max-w-[430px] sm:px-5 sm:py-8 lg:px-6">
           <PageHeader title={editingPersona.id ? "编辑角色卡" : "创建角色卡"} onBack={() => setPage("personas")} />
           <Card className="mb-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -228,7 +228,7 @@ export default function SettingsPage({ onLogout }: Props) {
   if (page === "account") {
     return (
       <div className="flex h-full flex-col overflow-auto bg-[#F7F3EE]">
-        <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        <div className="w-full px-4 py-6 sm:mx-auto sm:max-w-[430px] sm:px-5 sm:py-8 lg:px-6">
           <PageHeader title="账号与安全" onBack={() => setPage("main")} />
           <div className="mb-6 flex flex-col items-center rounded-2xl bg-white p-6 shadow-sm sm:p-8"><div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-r from-[#C89F7E] to-[#B08968] text-2xl font-semibold text-white sm:h-[72px] sm:w-[72px]">{email ? email[0].toUpperCase() : "?"}</div><div className="mt-3 text-base font-semibold text-[#3E2723] sm:text-lg">{email || "未登录"}</div><div className="mt-1 text-xs text-[#8D6E63] sm:text-sm">当前登录账号</div></div>
           <Card className="mb-6"><div className="flex items-center gap-3"><Shield size={20} strokeWidth={1.5} className="shrink-0 text-[#8D6E63]" /><div><div className="text-sm font-medium text-[#3E2723]">注册时间</div><div className="mt-0.5 text-xs text-[#8D6E63]">{new Date().toLocaleDateString("zh-CN")}</div></div></div></Card>
@@ -245,7 +245,7 @@ export default function SettingsPage({ onLogout }: Props) {
     const filtered = logFilter === "all" ? logs : logs.filter((l: any) => l.level === "ERROR");
     return (
       <div className="flex h-full flex-col overflow-auto bg-[#F7F3EE]">
-        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+        <div className="flex w-full flex-1 flex-col px-4 py-6 sm:mx-auto sm:max-w-[430px] sm:px-5 sm:py-8 lg:px-6">
           <div className="mb-4 flex items-center gap-3 sm:mb-5"><BackButton onClick={() => setPage("main")} /><h1 className="flex-1 text-lg font-semibold text-[#3E2723] sm:text-xl">运行日志</h1><button onClick={() => { fetch("/api/logs/clear", { method: "POST" }); setLogs([]); }} className="rounded-lg bg-red-500/8 px-2.5 py-1.5 text-xs text-red-500">清空</button><button onClick={() => setLogFilter(f => f === "all" ? "ERROR" : "all")} className="rounded-lg bg-[#C89F7E]/12 px-2.5 py-1.5 text-xs text-[#C89F7E]">{logFilter === "all" ? "仅错误" : "全部"}</button><button onClick={() => { const t = filtered.map((l: any) => `[${l.time}][${l.level}][${l.tag}] ${l.msg}`).join("\n"); navigator.clipboard.writeText(t).catch(() => {}); }} className="rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs text-emerald-500">复制</button></div>
           <div className="flex-1 overflow-auto font-mono text-[11px] leading-relaxed sm:text-xs">{filtered.length === 0 ? <div className="flex items-center justify-center py-24 text-sm text-[#8D6E63]">暂无日志</div> : filtered.map((l: any, i: number) => (<div key={i} className={`mb-1 rounded-lg border-l-[3px] px-3 py-2 ${l.level === "ERROR" ? "border-red-500 bg-red-500/5" : l.level === "WARN" ? "border-amber-500 bg-amber-500/5" : "border-transparent bg-white"}`}><span className="text-[#8D6E63]">[{l.time}]</span>{l.level !== "INFO" && <span className={`ml-1 font-semibold ${l.level === "ERROR" ? "text-red-500" : "text-amber-500"}`}>[{l.level}]</span>}<span className="ml-1 text-[#C89F7E]">[{l.tag}]</span><span className="ml-1 text-[#3E2723]">{l.msg}</span></div>))}</div>
         </div>
@@ -255,7 +255,7 @@ export default function SettingsPage({ onLogout }: Props) {
 
   return (
     <div className="flex h-full flex-col overflow-auto bg-[#F7F3EE]">
-      <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
+      <div className="w-full px-4 py-6 sm:mx-auto sm:max-w-[430px] sm:px-5 sm:py-8 lg:px-6">
         <h1 className="mb-1 text-xl font-semibold text-[#3E2723] sm:text-2xl">设置</h1>
         <div className="mb-6 flex items-center gap-3.5 rounded-2xl bg-white p-4 shadow-sm sm:gap-4 sm:p-5"><div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-[#C89F7E] to-[#B08968] text-lg font-semibold text-white sm:h-14 sm:w-14 sm:text-xl">{email ? email[0].toUpperCase() : "?"}</div><div className="min-w-0 flex-1"><div className="text-sm font-semibold text-[#3E2723] sm:text-[15px]">{email || "未登录"}</div><div className="mt-0.5 text-xs text-[#8D6E63] sm:text-[13px]">微信 Bot 账号</div></div><ChevronRight size={18} strokeWidth={1.5} className="shrink-0 text-[#8D6E63]/30" /></div>
         <div className="overflow-hidden rounded-2xl bg-[#EAE0D5]/30">

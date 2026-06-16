@@ -55,11 +55,11 @@ export default function Dashboard({ onLogout }: Props) {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      position: 'fixed', inset: 0, display: 'flex', alignItems: 'stretch', justifyContent: 'center',
       background: '#E8E0D8', fontFamily: 'Inter, system-ui, sans-serif',
     }}>
       <div style={{
-        width: '100%', maxWidth: 430, height: '100%', maxHeight: '100vh',
+        width: '100%', height: '100%', maxHeight: '100vh',
         background: '#F7F3EE', display: 'flex', flexDirection: 'column',
         overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.15)',
       }}>
