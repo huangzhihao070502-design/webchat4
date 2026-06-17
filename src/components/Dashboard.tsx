@@ -3,6 +3,7 @@ import { MessageCircle, User, Settings } from 'lucide-react';
 import ChatPage from './chat/ChatPage';
 import UserPage from './chat/UserPage';
 import SettingsPage from './chat/SettingsPage';
+import { useSettings } from '../contexts/SettingsContext';
 
 const API = '';
 
@@ -15,10 +16,30 @@ const tabs = [
   { key: 'settings' as Tab, icon: Settings, label: '设置' },
 ];
 
+const fontSizeMap: Record<string, number> = { small: 13, normal: 14, large: 16 };
+
+function getThemeColors(theme: string) {
+  const dark = theme === 'dark';
+  return {
+    outerBg: dark ? '#12122a' : '#E8E0D8',
+    bg: dark ? '#1a1a2e' : '#F7F3EE',
+    surface: dark ? '#252540' : '#ffffff',
+    text: dark ? '#e0e0e0' : '#3E2723',
+    textSec: dark ? '#a0a0b0' : '#8D6E63',
+    border: dark ? 'rgba(255,255,255,0.08)' : 'rgba(234,224,213,0.6)',
+    accent: '#C89F7E',
+    accentActive: '#B08968',
+    tabBg: dark ? '#252540' : 'white',
+  };
+}
+
 export default function Dashboard({ onLogout }: Props) {
   const [tab, setTab] = useState<Tab>('chat');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeChatUsers, setActiveChatUsers] = useState<Set<string>>(new Set());
+  const { settings } = useSettings();
+  const c = getThemeColors(settings.general_theme);
+  const baseFontSize = fontSizeMap[settings.general_font_size] || 14;
 
   // 轮询获取用户列表和当前选中用户
   useEffect(() => {
@@ -56,22 +77,20 @@ export default function Dashboard({ onLogout }: Props) {
   return (
     <div style={{
       position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: '#E8E0D8', fontFamily: 'Inter, system-ui, sans-serif',
+      background: c.outerBg, fontFamily: 'Inter, system-ui, sans-serif', fontSize: baseFontSize,
     }}>
       <div style={{
         width: '100%', maxWidth: 430, height: '100%', maxHeight: '100vh',
-        background: '#F7F3EE', display: 'flex', flexDirection: 'column',
+        background: c.bg, display: 'flex', flexDirection: 'column',
         overflow: 'hidden', boxShadow: '0 25px 50px rgba(0,0,0,0.15)',
       }}>
-        {/* 所有 tab 同时挂载，切换只控制显隐，ChatPage 实例永不销毁 */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* ── 聊天 ── */}
           <div style={{
             display: tab === 'chat' ? 'flex' : 'none', flex: 1,
             flexDirection: 'column', overflow: 'hidden', position: 'relative',
           }}>
             {activeChatUsers.size === 0 ? (
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8D6E63', fontSize: 14 }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.textSec, fontSize: baseFontSize }}>
                 暂无用户，请先连接微信
               </div>
             ) : Array.from(activeChatUsers).map(uid => (
@@ -86,7 +105,6 @@ export default function Dashboard({ onLogout }: Props) {
             ))}
           </div>
 
-          {/* ── 用户管理 ── */}
           <div style={{
             display: tab === 'user' ? 'flex' : 'none', flex: 1,
             overflow: 'auto', width: '100%', flexDirection: 'column',
@@ -94,7 +112,6 @@ export default function Dashboard({ onLogout }: Props) {
             <UserPage onSwitchUser={handleSwitchUser} />
           </div>
 
-          {/* ── 设置 ── */}
           <div style={{
             display: tab === 'settings' ? 'flex' : 'none', flex: 1,
             overflow: 'auto', width: '100%', flexDirection: 'column',
@@ -105,7 +122,7 @@ export default function Dashboard({ onLogout }: Props) {
 
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-around',
-          borderTop: '1px solid rgba(234,224,213,0.6)', background: 'white',
+          borderTop: `1px solid ${c.border}`, background: c.surface,
           padding: '8px 8px calc(env(safe-area-inset-bottom, 8px))', flexShrink: 0,
         }}>
           {tabs.map((t) => {
@@ -117,11 +134,11 @@ export default function Dashboard({ onLogout }: Props) {
                   gap: 2, padding: '4px 20px', border: 'none', background: 'none', cursor: 'pointer',
                   transition: 'all 0.15s',
                 }}>
-                <t.icon size={22} strokeWidth={active ? 2 : 1.5} color={active ? '#B08968' : '#8D6E6380'} />
-                <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, color: active ? '#B08968' : '#8D6E6380' }}>{t.label}</span>
+                <t.icon size={22} strokeWidth={active ? 2 : 1.5} color={active ? c.accentActive : c.textSec + '80'} />
+                <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, color: active ? c.accentActive : c.textSec + '80' }}>{t.label}</span>
                 {active && <div style={{
                   position: 'absolute', top: -8, height: 3, width: 32, borderRadius: 2,
-                  background: 'linear-gradient(135deg, #C89F7E, #B08968)',
+                  background: `linear-gradient(135deg, ${c.accent}, ${c.accentActive})`,
                 }} />}
               </button>
             );

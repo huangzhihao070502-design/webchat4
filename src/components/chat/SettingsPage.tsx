@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Shield, Bell, Lock, Sliders, Info, LogOut, ChevronRight, ArrowLeft, AlertTriangle, MessageSquare, Check, X, Loader, Edit3, Trash2, BookOpen } from "lucide-react";
+import { Shield, Bell, Lock, Sliders, Info, LogOut, ChevronRight, ArrowLeft, AlertTriangle, MessageSquare, Check, X, Loader, Edit3, Trash2, BookOpen, Volume2, Monitor, Eye, EyeOff, Trash, Download, Upload, Moon, Sun, Type, Globe, Smartphone, ShieldCheck, Clock, FileText, Zap } from "lucide-react";
+import { useSettings } from "../../contexts/SettingsContext";
 
 interface Props { onLogout: () => void }
 
@@ -53,6 +54,17 @@ function FormTextarea({ label, value, onChange, placeholder, rows = 3 }: { label
   );
 }
 
+function SelectInput({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-medium text-[#8D6E63] sm:text-sm">{label}</label>
+      <select value={value} onChange={e => onChange(e.target.value)} className="w-full appearance-none rounded-xl border border-[#EAE0D5]/60 bg-[#F7F3EE] px-3 py-2.5 text-sm text-[#3E2723] outline-none transition-colors focus:border-[#C89F7E]/50 focus:ring-2 focus:ring-[#C89F7E]/10 sm:px-4 sm:py-3">
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
 function SettingRow({ icon: Icon, label, onClick, badge, trailing }: { icon: any; label: string; onClick?: () => void; badge?: string | number; trailing?: React.ReactNode }) {
   return (
     <div onClick={onClick} className={`flex items-center gap-3 rounded-xl p-3 transition-colors sm:gap-4 sm:p-3.5 ${onClick ? "cursor-pointer hover:bg-[#F7F3EE]" : ""}`}>
@@ -66,7 +78,10 @@ function SettingRow({ icon: Icon, label, onClick, badge, trailing }: { icon: any
 
 export default function SettingsPage({ onLogout }: Props) {
   const [email, setEmail] = useState("");
-  const [page, setPage] = useState<"main" | "account" | "ai" | "personas" | "personaEdit" | "logs">("main");
+  const [page, setPage] = useState<"main" | "account" | "ai" | "personas" | "personaEdit" | "logs" | "features" | "notifications" | "privacy" | "general" | "about">("main");
+  const { settings, updateSettings, toggleFeature } = useSettings();
+  const [featureList, setFeatureList] = useState<any[]>([]);
+  const [settingsSaved, setSettingsSaved] = useState(false);
   const [personas, setPersonas] = useState<any[]>([]);
   const [personaMap, setPersonaMap] = useState<Record<string, string>>({});
   const [editingPersona, setEditingPersona] = useState<any>({ name: "", personality: "", style: "", background: "", details: "" });
@@ -88,6 +103,7 @@ export default function SettingsPage({ onLogout }: Props) {
   useEffect(() => { if (page === "personas") { loadPersonas(); fetch(`${API}/api/users`).then(r => r.json()).then(d => { if (d.users) setUsers(d.users); }).catch(() => {}); fetch(`${API}/api/skills`).then(r => r.json()).then(d => { if (d.skills) setAllSkills(d.skills); }).catch(() => {}); } }, [page, loadPersonas]);
   useEffect(() => { if (page !== "personaEdit") return; fetch(`${API}/api/skills`).then(r => r.json()).then(d => { if (d.skills) { setAllSkills(d.skills); setSelectedSkills(editingPersona.id && editingPersona.skills?.length > 0 ? editingPersona.skills : d.skills.map((s: any) => s.id)); } }).catch(() => {}); }, [page]);
   useEffect(() => { if (page === "ai") { fetch(`${API}/api/ai-config`).then(r => r.json()).then(d => { if (d && typeof d === "object") setAiCfg({ enabled: d.enabled || false, api_url: d.api_url || "", api_key: d.api_key || "", model: d.model || "", prompt: d.prompt || "", scheduled_reply: d.scheduled_reply || false, active_interval: d.active_interval || 60, max_replies: d.max_replies || 2, reply_min_chars: d.reply_min_chars || 0, reply_max_chars: d.reply_max_chars || 0, token_limit: d.token_limit || 0 }); }).catch(() => {}); } }, [page]);
+  const handleSaveSettings = useCallback((patch: Record<string, any>) => { updateSettings(patch); setSettingsSaved(true); setTimeout(() => setSettingsSaved(false), 2000); }, [updateSettings]);
 
   const handleSaveAi = useCallback(async () => { try { await fetch(`${API}/api/ai-config`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(aiCfg) }); setAiSaved(true); setTimeout(() => setAiSaved(false), 2000); } catch {} }, [aiCfg]);
   const handleTestAi = useCallback(async () => { setAiTesting(true); setAiTestResult(null); try { const r = await fetch(`${API}/api/ai-test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ api_url: aiCfg.api_url, api_key: aiCfg.api_key, model: aiCfg.model }) }); const d = await r.json(); setAiTestResult(d.success ? `✅ 连接成功！回复：${d.reply}` : `❌ ${d.error}`); } catch { setAiTestResult("❌ 测试失败"); } setAiTesting(false); }, [aiCfg]);
@@ -253,6 +269,182 @@ export default function SettingsPage({ onLogout }: Props) {
     );
   }
 
+  if (page === "features") {
+    const featureCategories = [
+      { cat: "天气与位置", items: [
+        { id: "weather", name: "天气查询", icon: "🌤", desc: "实时天气，支持全国城市" },
+        { id: "weather_3d", name: "天气预报", icon: "📅", desc: "未来三天预报" },
+        { id: "ip_location", name: "IP 定位", icon: "📍", desc: "IP 地址地理定位" },
+      ]},
+      { cat: "金融", items: [
+        { id: "exchange_rate", name: "汇率换算", icon: "💱", desc: "实时汇率查询" },
+        { id: "crypto", name: "加密货币", icon: "₿", desc: "BTC/ETH 等币价" },
+      ]},
+      { cat: "内容与娱乐", items: [
+        { id: "hitokoto", name: "随机一言", icon: "💭", desc: "随机名言语录" },
+        { id: "joke", name: "随机笑话", icon: "😂", desc: "英文随机笑话" },
+        { id: "cat_image", name: "随机猫咪", icon: "🐱", desc: "随机猫咪图片" },
+        { id: "dog_image", name: "随机狗狗", icon: "🐶", desc: "随机狗狗图片" },
+        { id: "news_hn", name: "科技新闻", icon: "📰", desc: "Hacker News 热榜" },
+        { id: "numbers", name: "数字趣闻", icon: "🔢", desc: "数字冷知识" },
+      ]},
+    ];
+    return (
+      <div className="flex h-full flex-col overflow-auto bg-[#F7F3EE]">
+        <div className="w-full px-4 py-6 sm:px-5 sm:py-8 lg:px-6">
+          <PageHeader title="功能选项" onBack={() => setPage("main")} />
+          <p className="mb-4 text-xs text-[#8D6E63] sm:text-sm">开启后 AI 聊天时可自动调用这些功能，关闭则不使用。所有接口免费无需注册。</p>
+          {featureCategories.map(cat => (
+            <div key={cat.cat} className="mb-4">
+              <div className="mb-2 px-1 text-xs font-medium text-[#8D6E63]/60">{cat.cat}</div>
+              <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
+                {cat.items.map((f, i) => {
+                  const enabled = settings.features?.[f.id] !== false;
+                  return (
+                    <div key={f.id} className={`flex items-center gap-3 p-3.5 sm:p-4 ${i > 0 ? "border-t border-[#EAE0D5]/30" : ""}`}>
+                      <span className="text-xl">{f.icon}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium text-[#3E2723] sm:text-[15px]">{f.name}</div>
+                        <div className="mt-0.5 text-[11px] text-[#8D6E63] sm:text-xs">{f.desc}</div>
+                      </div>
+                      <Toggle enabled={enabled} onToggle={() => toggleFeature(f.id)} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (page === "notifications") {
+    return (
+      <div className="flex h-full flex-col overflow-auto bg-[#F7F3EE]">
+        <div className="w-full px-4 py-6 sm:px-5 sm:py-8 lg:px-6">
+          <PageHeader title="消息通知" onBack={() => setPage("main")} />
+          <Card className="mb-4">
+            <div className="flex items-center gap-3"><Toggle enabled={settings.notify_sound} onToggle={() => handleSaveSettings({ notify_sound: !settings.notify_sound })} /><Volume2 size={18} strokeWidth={1.5} className="text-[#8D6E63]" /><span className="text-sm font-medium text-[#3E2723] sm:text-[15px]">消息提示音</span></div>
+            <p className="mt-1.5 pl-[58px] text-[11px] leading-relaxed text-[#8D6E63]/50">收到新消息时播放提示音</p>
+          </Card>
+          <Card className="mb-4">
+            <div className="flex items-center gap-3"><Toggle enabled={settings.notify_desktop} onToggle={() => handleSaveSettings({ notify_desktop: !settings.notify_desktop })} /><Monitor size={18} strokeWidth={1.5} className="text-[#8D6E63]" /><span className="text-sm font-medium text-[#3E2723] sm:text-[15px]">桌面通知</span></div>
+            <p className="mt-1.5 pl-[58px] text-[11px] leading-relaxed text-[#8D6E63]/50">在系统通知中心显示新消息提醒</p>
+          </Card>
+          <Card className="mb-4">
+            <div className="flex items-center gap-3"><Toggle enabled={settings.notify_ai_indicator} onToggle={() => handleSaveSettings({ notify_ai_indicator: !settings.notify_ai_indicator })} /><MessageSquare size={18} strokeWidth={1.5} className="text-[#8D6E63]" /><span className="text-sm font-medium text-[#3E2723] sm:text-[15px]">AI 回复标识</span></div>
+            <p className="mt-1.5 pl-[58px] text-[11px] leading-relaxed text-[#8D6E63]/50">在 AI 自动生成的消息旁显示标识标签</p>
+          </Card>
+          <Card className="mb-4">
+            <div className="flex items-center gap-3"><Toggle enabled={settings.notify_quiet_enabled} onToggle={() => handleSaveSettings({ notify_quiet_enabled: !settings.notify_quiet_enabled })} /><Bell size={18} strokeWidth={1.5} className="text-[#8D6E63]" /><span className="text-sm font-medium text-[#3E2723] sm:text-[15px]">免打扰模式</span></div>
+            {settings.notify_quiet_enabled && (
+              <div className="mt-3 flex items-center gap-2 pl-[58px]">
+                <input type="time" value={settings.notify_quiet_start} onChange={e => handleSaveSettings({ notify_quiet_start: e.target.value })} className="rounded-lg border border-[#EAE0D5]/60 bg-[#F7F3EE] px-2 py-1.5 text-sm text-[#3E2723] outline-none focus:border-[#C89F7E]/50" />
+                <span className="text-sm text-[#8D6E63]">至</span>
+                <input type="time" value={settings.notify_quiet_end} onChange={e => handleSaveSettings({ notify_quiet_end: e.target.value })} className="rounded-lg border border-[#EAE0D5]/60 bg-[#F7F3EE] px-2 py-1.5 text-sm text-[#3E2723] outline-none focus:border-[#C89F7E]/50" />
+              </div>
+            )}
+            <p className="mt-1.5 pl-[58px] text-[11px] leading-relaxed text-[#8D6E63]/50">设定时间段内静音所有通知</p>
+          </Card>
+          {settingsSaved && <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600"><Check size={16} strokeWidth={2} /> 设置已保存</div>}
+        </div>
+      </div>
+    );
+  }
+
+  if (page === "privacy") {
+    return (
+      <div className="flex h-full flex-col overflow-auto bg-[#F7F3EE]">
+        <div className="w-full px-4 py-6 sm:px-5 sm:py-8 lg:px-6">
+          <PageHeader title="隐私" onBack={() => setPage("main")} />
+          <Card className="mb-4">
+            <div className="flex items-center gap-3"><Toggle enabled={settings.privacy_msg_encrypt} onToggle={() => handleSaveSettings({ privacy_msg_encrypt: !settings.privacy_msg_encrypt })} /><ShieldCheck size={18} strokeWidth={1.5} className="text-[#8D6E63]" /><span className="text-sm font-medium text-[#3E2723] sm:text-[15px]">消息加密存储</span></div>
+            <p className="mt-1.5 pl-[58px] text-[11px] leading-relaxed text-[#8D6E63]/50">对本地存储的消息进行加密处理</p>
+          </Card>
+          <Card className="mb-4">
+            <div className="flex items-center gap-3"><Clock size={18} strokeWidth={1.5} className="shrink-0 text-[#8D6E63]" /><div className="flex-1"><span className="text-sm font-medium text-[#3E2723] sm:text-[15px]">自动删除消息</span></div></div>
+            <div className="mt-3 grid grid-cols-4 gap-2">
+              {[{ v: "0", l: "永不" }, { v: "7", l: "7天" }, { v: "30", l: "30天" }, { v: "90", l: "90天" }].map(o => (
+                <button key={o.v} onClick={() => handleSaveSettings({ privacy_auto_delete: parseInt(o.v) })} className={`rounded-xl py-2.5 text-xs font-medium transition-all sm:text-sm ${settings.privacy_auto_delete === parseInt(o.v) ? "border-2 border-[#C89F7E] bg-[#C89F7E]/10 text-[#C89F7E]" : "border border-[#EAE0D5]/60 bg-[#F7F3EE] text-[#8D6E63]"}`}>{o.l}</button>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-[#8D6E63]/50">超过设定时间的消息将自动清除</p>
+          </Card>
+          <Card className="mb-4">
+            <div className="flex items-center gap-3"><Toggle enabled={settings.privacy_read_receipt} onToggle={() => handleSaveSettings({ privacy_read_receipt: !settings.privacy_read_receipt })} /><Eye size={18} strokeWidth={1.5} className="text-[#8D6E63]" /><span className="text-sm font-medium text-[#3E2723] sm:text-[15px]">已读回执</span></div>
+            <p className="mt-1.5 pl-[58px] text-[11px] leading-relaxed text-[#8D6E63]/50">让对方知道你已阅读消息</p>
+          </Card>
+          <Card className="mb-4">
+            <div className="flex items-center gap-3"><Toggle enabled={settings.privacy_show_online} onToggle={() => handleSaveSettings({ privacy_show_online: !settings.privacy_show_online })} /><EyeOff size={18} strokeWidth={1.5} className="text-[#8D6E63]" /><span className="text-sm font-medium text-[#3E2723] sm:text-[15px]">显示在线状态</span></div>
+            <p className="mt-1.5 pl-[58px] text-[11px] leading-relaxed text-[#8D6E63]/50">其他用户可以看到你的在线状态</p>
+          </Card>
+          {settingsSaved && <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600"><Check size={16} strokeWidth={2} /> 设置已保存</div>}
+        </div>
+      </div>
+    );
+  }
+
+  if (page === "general") {
+    return (
+      <div className="flex h-full flex-col overflow-auto bg-[#F7F3EE]">
+        <div className="w-full px-4 py-6 sm:px-5 sm:py-8 lg:px-6">
+          <PageHeader title="通用" onBack={() => setPage("main")} />
+          <Card className="mb-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <SelectInput label="语言" value={settings.general_language} onChange={v => handleSaveSettings({ general_language: v })} options={[{ value: "zh-CN", label: "中文" }, { value: "en", label: "English" }]} />
+              <SelectInput label="主题" value={settings.general_theme} onChange={v => handleSaveSettings({ general_theme: v })} options={[{ value: "auto", label: "跟随系统" }, { value: "light", label: "浅色模式" }, { value: "dark", label: "深色模式" }]} />
+              <SelectInput label="字体大小" value={settings.general_font_size} onChange={v => handleSaveSettings({ general_font_size: v })} options={[{ value: "small", label: "小" }, { value: "normal", label: "正常" }, { value: "large", label: "大" }]} />
+            </div>
+          </Card>
+          <Card className="mb-4">
+            <div className="mb-3 flex items-center gap-3"><Download size={18} strokeWidth={1.5} className="text-[#8D6E63]" /><span className="text-sm font-medium text-[#3E2723] sm:text-[15px]">数据管理</span></div>
+            <div className="flex gap-3">
+              <button onClick={() => { const data = JSON.stringify(settings, null, 2); const blob = new Blob([data], { type: "application/json" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "webchat-settings.json"; a.click(); URL.revokeObjectURL(url); }} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#C89F7E]/30 bg-white px-4 py-3 text-sm font-medium text-[#C89F7E] transition-all hover:bg-[#C89F7E]/5"><Download size={16} strokeWidth={1.5} /> 导出设置</button>
+              <button onClick={() => { const input = document.createElement("input"); input.type = "file"; input.accept = ".json"; input.onchange = async (e) => { const file = (e.target as HTMLInputElement).files?.[0]; if (!file) return; try { const text = await file.text(); const imported = JSON.parse(text); handleSaveSettings(imported); alert("设置已导入"); } catch { alert("导入失败，文件格式不正确"); } }; input.click(); }} className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#C89F7E]/30 bg-white px-4 py-3 text-sm font-medium text-[#C89F7E] transition-all hover:bg-[#C89F7E]/5"><Upload size={16} strokeWidth={1.5} /> 导入设置</button>
+            </div>
+          </Card>
+          <Card className="mb-4">
+            <button onClick={() => { if (confirm("确认清除本地缓存？")) { try { localStorage.clear(); alert("缓存已清除"); } catch { alert("清除失败"); } } }} className="flex w-full items-center gap-3"><Trash size={18} strokeWidth={1.5} className="text-red-500" /><span className="text-sm font-medium text-red-500 sm:text-[15px]">清除本地缓存</span></button>
+          </Card>
+          {settingsSaved && <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 px-4 py-3 text-sm text-emerald-600"><Check size={16} strokeWidth={2} /> 设置已保存</div>}
+        </div>
+      </div>
+    );
+  }
+
+  if (page === "about") {
+    return (
+      <div className="flex h-full flex-col overflow-auto bg-[#F7F3EE]">
+        <div className="w-full px-4 py-6 sm:px-5 sm:py-8 lg:px-6">
+          <PageHeader title="关于" onBack={() => setPage("main")} />
+          <div className="mb-6 flex flex-col items-center rounded-2xl bg-white p-6 shadow-sm sm:p-8">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-r from-[#C89F7E] to-[#B08968] text-2xl font-bold text-white sm:h-[72px] sm:w-[72px]">W</div>
+            <div className="mt-3 text-base font-semibold text-[#3E2723] sm:text-lg">WebChat</div>
+            <div className="mt-1 text-xs text-[#8D6E63] sm:text-sm">微信 Bot 管理工具</div>
+            <div className="mt-2 rounded-full bg-[#C89F7E]/10 px-3 py-1 text-xs font-medium text-[#C89F7E]">v1.0.0</div>
+          </div>
+          <Card className="mb-4">
+            <div className="mb-3 text-sm font-medium text-[#3E2723]">技术栈</div>
+            <div className="flex flex-wrap gap-2">
+              {[{ name: "React 18", color: "bg-blue-500/10 text-blue-600" }, { name: "TypeScript", color: "bg-sky-500/10 text-sky-600" }, { name: "Tailwind CSS", color: "bg-cyan-500/10 text-cyan-600" }, { name: "Node.js", color: "bg-green-500/10 text-green-600" }, { name: "Vite", color: "bg-purple-500/10 text-purple-600" }].map(t => <span key={t.name} className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${t.color}`}>{t.name}</span>)}
+            </div>
+          </Card>
+          <Card className="mb-4">
+            <div className="mb-3 text-sm font-medium text-[#3E2723]">功能特性</div>
+            <div className="space-y-2">
+              {["微信 Bot 扫码登录与消息收发", "AI 自动回复（支持多种模型）", "角色卡与技能系统", "多媒体消息支持", "定时主动问候", "运行日志与监控"].map(f => <div key={f} className="flex items-center gap-2.5"><div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500"><Check size={12} strokeWidth={2} /></div><span className="text-sm text-[#3E2723]">{f}</span></div>)}
+            </div>
+          </Card>
+          <Card className="mb-4">
+            <div className="flex items-center gap-3"><FileText size={18} strokeWidth={1.5} className="text-[#8D6E63]" /><div className="flex-1"><div className="text-sm font-medium text-[#3E2723]">开源许可</div><div className="mt-0.5 text-xs text-[#8D6E63]">MIT License</div></div></div>
+          </Card>
+          <div className="text-center text-[11px] text-[#8D6E63]/40">Made with ❤️</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col overflow-auto bg-[#F7F3EE]">
       <div className="w-full px-4 py-6 sm:px-5 sm:py-8 lg:px-6">
@@ -263,7 +455,8 @@ export default function SettingsPage({ onLogout }: Props) {
           <SettingRow icon={BookOpen} label="角色卡" onClick={() => setPage("personas")} badge={personas.length} />
           <SettingRow icon={MessageSquare} label="AI 自动回复" onClick={() => setPage("ai")} />
           <SettingRow icon={AlertTriangle} label="运行日志" onClick={() => setPage("logs")} />
-          {[{ icon: Bell, label: "消息通知" }, { icon: Lock, label: "隐私" }, { icon: Sliders, label: "通用" }, { icon: Info, label: "关于" }].map((item, i) => (<SettingRow key={i} icon={item.icon} label={item.label} trailing={<span className="text-xs text-[#8D6E63]/30">即将推出</span>} />))}
+          <SettingRow icon={Zap} label="功能选项" onClick={() => setPage("features")} badge="11" />
+          {[{ icon: Bell, label: "消息通知", page: "notifications" as const }, { icon: Lock, label: "隐私", page: "privacy" as const }, { icon: Sliders, label: "通用", page: "general" as const }, { icon: Info, label: "关于", page: "about" as const }].map((item) => (<SettingRow key={item.page} icon={item.icon} label={item.label} onClick={() => setPage(item.page)} />))}
         </div>
         <button onClick={onLogout} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-red-500/5 px-4 py-3.5 text-sm font-medium text-red-500 transition-all hover:bg-red-500/10 sm:mt-8"><LogOut size={16} strokeWidth={1.5} /> 退出登录</button>
       </div>

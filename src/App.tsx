@@ -4,6 +4,7 @@ import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
 import QRConnect from './components/QRConnect';
 import Dashboard from './components/Dashboard';
+import { SettingsProvider } from './contexts/SettingsContext';
 
 type Page = 'login' | 'register' | 'qrcode' | 'dashboard';
 
@@ -57,7 +58,9 @@ export default function App() {
       )}
       {page === 'dashboard' && (
         <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-          <Dashboard onLogout={handleLogout} />
+          <SettingsProvider>
+            <Dashboard onLogout={handleLogout} />
+          </SettingsProvider>
         </motion.div>
       )}
     </AnimatePresence>

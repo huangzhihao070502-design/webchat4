@@ -195,3 +195,43 @@ input[type="checkbox"]:checked + .checkbox-custom svg {
   background: rgba(45, 43, 85, 0.12);
   color: #1e1b4b;
 }
+
+/* ============================================
+   Font size from settings
+   ============================================ */
+:root {
+  --font-size-base: 14px;
+}
+
+/* ============================================
+   Dark mode theme
+   ============================================ */
+[data-theme="dark"] {
+  --color-bg: #1a1a2e;
+  --color-surface: #252540;
+  --color-surface-hover: #2e2e4a;
+  --color-text: #e0e0e0;
+  --color-text-secondary: #a0a0b0;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-accent: #C89F7E;
+  --color-accent-light: rgba(200, 159, 126, 0.15);
+}
+
+[data-theme="dark"] body {
+  background: #1a1a2e;
+}
+
+[data-theme="light"] {
+  --color-bg: #F7F3EE;
+  --color-surface: #ffffff;
+  --color-surface-hover: #F7F3EE;
+  --color-text: #3E2723;
+  --color-text-secondary: #8D6E63;
+  --color-border: rgba(234, 224, 213, 0.6);
+  --color-accent: #C89F7E;
+  --color-accent-light: rgba(200, 159, 126, 0.12);
+}
+
+[data-theme="light"] body {
+  background: #f5f0eb;
+}
