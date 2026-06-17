@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "com.webchat4.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.webchat4.app"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
     }
@@ -39,8 +39,8 @@ android {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.appcompat:appcompat:1.6.1")
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }
