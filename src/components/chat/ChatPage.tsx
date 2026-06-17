@@ -39,7 +39,9 @@ export default function ChatPage({ userId }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement|null>(null);
   const msgIdCounter = useRef(0);
-  const { settings, resolvedTheme } = useSettings();
+  const settingsCtx = useSettings();
+  const settings = settingsCtx?.settings || { general_font_size: 'normal', notify_quiet_enabled: false, notify_quiet_start: '22:00', notify_quiet_end: '08:00', notify_sound: true, notify_desktop: true, notify_ai_indicator: true };
+  const resolvedTheme = settingsCtx?.resolvedTheme || 'light';
   const tc = getThemeColors(resolvedTheme);
   const baseFontSize = fontSizeMap[settings.general_font_size] || 14;
   useEffect(() => { endRef.current?.scrollIntoView({behavior:'smooth'}) }, [msgs]);
