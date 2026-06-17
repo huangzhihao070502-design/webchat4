@@ -80,7 +80,11 @@ function SettingRow({ icon: Icon, label, onClick, badge, trailing }: { icon: any
 export default function SettingsPage({ onLogout }: Props) {
   const [email, setEmail] = useState("");
   const [page, setPage] = useState<"main" | "account" | "ai" | "personas" | "personaEdit" | "logs" | "features" | "notifications" | "privacy" | "general" | "about" | "ip">("main");
-  const { settings, updateSettings, toggleFeature, lang } = useSettings();
+  const settingsCtx = useSettings();
+  const settings = settingsCtx?.settings || { general_language: 'zh-CN', general_theme: 'auto', general_font_size: 'normal', features: {} };
+  const lang = settingsCtx?.lang || 'zh-CN';
+  const updateSettings = settingsCtx?.updateSettings || (() => {});
+  const toggleFeature = settingsCtx?.toggleFeature || (() => {});
   const [featureList, setFeatureList] = useState<any[]>([]);
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [personas, setPersonas] = useState<any[]>([]);
