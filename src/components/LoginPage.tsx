@@ -1,9 +1,14 @@
-import { useState, useCallback, type FormEvent } from 'react';
+import { useState, useCallback, useEffect, type FormEvent } from 'react';
 import { motion } from 'framer-motion';
-import { Lock, Check, AlertCircle } from 'lucide-react';
+import { Lock, Check, AlertCircle, ShieldBan } from 'lucide-react';
 import MeshBackground from './MeshBackground';
 import InputField from './InputField';
 import { login } from '../lib/auth';
+import { t, Lang } from '../lib/i18n';
+
+function useLocalLang(): Lang {
+  try { const s = JSON.parse(localStorage.getItem('webchat_settings') || '{}'); return s.general_language === 'en' ? 'en' : 'zh-CN'; } catch { return 'zh-CN'; }
+}
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -131,6 +136,7 @@ interface Props {
 }
 
 export default function LoginPage({ onRegister, onLoginSuccess }: Props) {
+  const lang = useLocalLang();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
@@ -138,21 +144,29 @@ export default function LoginPage({ onRegister, onLoginSuccess }: Props) {
   const [loading, setLoading] = useState(false);
   const [shakeKey, setShakeKey] = useState(0);
   const [loginError, setLoginError] = useState('');
+  const [ipBanned, setIpBanned] = useState(false);
+
+  /* ---------- IP ban check on mount ---------- */
+  useEffect(() => {
+    fetch('/api/status').then(r => {
+      if (r.status === 403) return r.json().then(d => { if (d.error === 'IP_BANNED') setIpBanned(true); });
+    }).catch(() => {});
+  }, []);
 
   /* ---------- validation ---------- */
   const validate = useCallback((): boolean => {
     const next: FormErrors = {};
 
     if (!email.trim()) {
-      next.email = '请输入邮箱地址';
+      next.email = t('login.email_required', lang);
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      next.email = '邮箱格式不正确';
+      next.email = t('login.email_invalid', lang);
     }
 
     if (!password) {
-      next.password = '请输入密码';
+      next.password = t('login.password_required', lang);
     } else if (password.length < 6) {
-      next.password = '密码至少需要6个字符';
+      next.password = t('login.password_short', lang);
     }
 
     setErrors(next);
@@ -200,6 +214,29 @@ export default function LoginPage({ onRegister, onLoginSuccess }: Props) {
     );
   }, []);
 
+  /* ---------- IP banned screen ---------- */
+  if (ipBanned) {
+    return (
+      <div className="relative min-h-screen overflow-hidden bg-[#f5f0eb] font-sans">
+        <MeshBackground />
+        <main className="relative z-10 flex min-h-screen items-center justify-center px-5 py-12 sm:px-6">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex w-full max-w-[410px] flex-col items-center text-center">
+            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 120, damping: 14 }}
+              className="mx-auto mb-8 flex h-20 w-20 items-center justify-center rounded-3xl border border-red-200/50 bg-red-50/60 shadow-sm">
+              <ShieldBan size={40} className="text-red-400" />
+            </motion.div>
+            <h1 className="text-[28px] font-light tracking-[-0.02em] text-[#1a1a2e]">{t('ip.banned_message', lang)}</h1>
+            <p className="mt-3 text-[15px] leading-relaxed text-[#8a8a9a]">{t('ip.banned_message', lang)}</p>
+            <p className="mt-2 text-[15px] leading-relaxed text-[#8a8a9a]">{t('ip.contact_admin', lang)}</p>
+            <div className="mt-8 rounded-2xl border border-red-200/30 bg-red-50/40 px-6 py-4">
+              <p className="text-[12px] font-medium text-red-400">{t('ip.error_code', lang)}: IP_BANNED</p>
+            </div>
+          </motion.div>
+        </main>
+      </div>
+    );
+  }
+
   /* ---------- render ---------- */
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#f5f0eb] font-sans">
@@ -230,10 +267,10 @@ export default function LoginPage({ onRegister, onLoginSuccess }: Props) {
               <LogoIcon />
             </motion.div>
             <h1 className="text-[26px] font-light tracking-[-0.02em] text-[#1a1a2e]">
-              欢迎回来
+              {t('login.welcome', lang)}
             </h1>
             <p className="mt-2 text-[15px] font-normal leading-relaxed text-[#8a8a9a]">
-              登录您的账号以继续
+              {t('login.subtitle', lang)}
             </p>
           </motion.div>
 
@@ -272,7 +309,7 @@ export default function LoginPage({ onRegister, onLoginSuccess }: Props) {
               >
                 <InputField
                   id="login-email"
-                  label="邮箱地址"
+                  label={t('login.email', lang)}
                   type="email"
                   value={email}
                   onChange={handleEmailChange}
@@ -292,7 +329,7 @@ export default function LoginPage({ onRegister, onLoginSuccess }: Props) {
               >
                 <InputField
                   id="login-password"
-                  label="密码"
+                  label={t('login.password', lang)}
                   value={password}
                   onChange={handlePasswordChange}
                   error={errors.password}
@@ -319,7 +356,7 @@ export default function LoginPage({ onRegister, onLoginSuccess }: Props) {
                     <Check size={12} strokeWidth={2.5} stroke="white" />
                   </span>
                   <span className="text-[14px] text-[#6b6b80] transition-colors duration-200 group-hover:text-[#4a4a5e]">
-                    记住我
+                    {t('login.remember', lang)}
                   </span>
                 </label>
 
@@ -335,7 +372,7 @@ export default function LoginPage({ onRegister, onLoginSuccess }: Props) {
                   "
                   tabIndex={0}
                 >
-                  忘记密码？
+                  {t('login.forgot', lang)}
                 </a>
               </motion.div>
 
@@ -368,12 +405,12 @@ export default function LoginPage({ onRegister, onLoginSuccess }: Props) {
                   {loading ? (
                     <span className="flex items-center gap-2.5">
                       <Spinner />
-                      <span className="text-white/90">登录中...</span>
+                      <span className="text-white/90">{t('login.logging_in', lang)}</span>
                     </span>
                   ) : (
                     <span className="flex items-center gap-2">
                       <Lock size={16} strokeWidth={1.5} />
-                      登录
+                      {t('login.submit', lang)}
                     </span>
                   )}
                 </button>
@@ -384,7 +421,7 @@ export default function LoginPage({ onRegister, onLoginSuccess }: Props) {
                 variants={itemVariants}
                 className="pt-2 text-center text-[14px] text-[#8a8a9a]"
               >
-                还没有账号？{' '}
+                {t('login.no_account', lang)}{' '}
                 <a
                   href="#"
                   onClick={(e) => { e.preventDefault(); onRegister?.(); }}
@@ -396,7 +433,7 @@ export default function LoginPage({ onRegister, onLoginSuccess }: Props) {
                   "
                   tabIndex={0}
                 >
-                  注册
+                  {t('login.register', lang)}
                 </a>
               </motion.p>
             </form>

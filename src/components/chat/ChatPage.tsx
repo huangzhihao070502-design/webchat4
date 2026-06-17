@@ -35,11 +35,12 @@ export default function ChatPage({ userId }: Props) {
   const [showAddQr, setShowAddQr] = useState(false);
   const [addQrImg, setAddQrImg] = useState('');
   const [addQrStatus, setAddQrStatus] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const endRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement|null>(null);
   const msgIdCounter = useRef(0);
-  const { settings } = useSettings();
-  const tc = getThemeColors(settings.general_theme);
+  const { settings, resolvedTheme } = useSettings();
+  const tc = getThemeColors(resolvedTheme);
   const baseFontSize = fontSizeMap[settings.general_font_size] || 14;
   useEffect(() => { endRef.current?.scrollIntoView({behavior:'smooth'}) }, [msgs]);
 
@@ -248,6 +249,10 @@ export default function ChatPage({ userId }: Props) {
           <button key={i} style={{width:32,height:32,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:12,border:'none',background:'none',cursor:'pointer'}}><Icon size={17} strokeWidth={1.5} color={tc.textSec}/></button>
         ))}</div>
       </div>
+      {/* Search bar */}
+      <div style={{padding:'8px 16px',borderBottom:`1px solid ${tc.border}`,background:tc.surface,flexShrink:0}}>
+        <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜索消息..." style={{width:'100%',padding:'6px 12px',borderRadius:8,border:'none',background:tc.bg,color:tc.text,fontSize:13,outline:'none'}} />
+      </div>
       <div style={{flex:1,minHeight:0,overflowY:'auto' as const,padding:'16px',fontSize:baseFontSize}}>
         {msgs.length === 0 && <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100%',textAlign:'center',padding:'0 32px'}}>
           <div style={{width:56,height:56,borderRadius:'50%',background:tc.emptyBg,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16,fontSize:28}}>💬</div>
@@ -273,7 +278,7 @@ export default function ChatPage({ userId }: Props) {
           </>
           )}
         </div>}
-        {msgs.map((msg, i) => {
+        {msgs.filter(msg => !searchQuery || (msg.text || '').toLowerCase().includes(searchQuery.toLowerCase())).map((msg, i) => {
           const mine = msg.isMine; const isPlaying = playingId === msg.id;
           const showDate = i === 0 || msgs[i-1].time.slice(0,5) !== msg.time.slice(0,5);
           const showAiBadge = msg.is_ai && settings.notify_ai_indicator && !mine;

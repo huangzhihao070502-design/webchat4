@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, Keyboard, Smile, Plus, Send, Image, FileText, Camera, MapPin } from 'lucide-react';
+import { useSettings } from '../../contexts/SettingsContext';
+import { t } from '../../lib/i18n';
 
 interface Props {
   onSendText: (text: string) => void;
@@ -13,6 +15,8 @@ interface Props {
 const iconBg = (c: string) => `linear-gradient(135deg, ${c}, ${c}dd)`;
 
 export default function InputArea({ onSendText, onSendVoice, onSendImage, onSendFile, onSendLocation }: Props) {
+  const { resolvedTheme, lang } = useSettings();
+  const isDark = resolvedTheme === 'dark';
   const [mode, setMode] = useState<'text'|'voice'>('text');
   const [text, setText] = useState('');
   const [showMore, setShowMore] = useState(false);
@@ -73,16 +77,16 @@ export default function InputArea({ onSendText, onSendVoice, onSendImage, onSend
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => { onSendLocation(pos.coords.latitude, pos.coords.longitude); setShowMore(false); },
-        () => alert('无法获取位置，请检查定位权限'),
+        () => alert(t('input.location_error', lang)),
       );
-    } else alert('当前浏览器不支持定位');
+    } else alert(t('input.no_geolocation', lang));
   }, [onSendLocation]);
 
   const moreItems = [
-    { icon: Image, label: '照片', color: '#C89F7E', action: () => imgInput.current?.click() },
-    { icon: FileText, label: '文件', color: '#B08968', action: () => fileInput.current?.click() },
-    { icon: Camera, label: '相机', color: '#A67C52', action: () => cameraInput.current?.click() },
-    { icon: MapPin, label: '位置', color: '#8D6E63', action: handleLocation },
+    { icon: Image, label: t('input.photo', lang), color: '#C89F7E', action: () => imgInput.current?.click() },
+    { icon: FileText, label: t('input.file', lang), color: '#B08968', action: () => fileInput.current?.click() },
+    { icon: Camera, label: t('input.camera', lang), color: '#A67C52', action: () => cameraInput.current?.click() },
+    { icon: MapPin, label: t('input.location', lang), color: '#8D6E63', action: handleLocation },
   ];
 
   return (<>
@@ -90,22 +94,22 @@ export default function InputArea({ onSendText, onSendVoice, onSendImage, onSend
     <input ref={fileInput} type="file" onChange={handleFilePick} style={{display:'none'}} />
     <input ref={cameraInput} type="file" accept="image/*" capture="camera" onChange={handleCameraCapture} style={{display:'none'}} />
 
-    <div style={{borderTop:'1px solid rgba(234,224,213,0.6)',background:'white',padding:'10px 12px calc(env(safe-area-inset-bottom,8px))'}}>
+    <div style={{borderTop:`1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(234,224,213,0.6)'}`,background:isDark ? '#252540' : 'white',padding:'10px 12px calc(env(safe-area-inset-bottom,8px))'}}>
       <div style={{display:'flex',alignItems:'flex-end',gap:8}}>
         <button onClick={()=>setMode(m=>m==='text'?'voice':'text')}
-          style={{width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:12,border:'none',background:'none',cursor:'pointer',color:'#8D6E63',flexShrink:0}}>
+          style={{width:36,height:36,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:12,border:'none',background:'none',cursor:'pointer',color:isDark ? '#a0a0b0' : '#8D6E63',flexShrink:0}}>
           {mode==='text' ? <Mic size={20} strokeWidth={1.5}/> : <Keyboard size={20} strokeWidth={1.5}/>}
         </button>
         {mode==='text' ? (
-          <div style={{flex:1,display:'flex',alignItems:'center',borderRadius:14,background:'#F7F3EE',padding:'0 12px'}}>
+          <div style={{flex:1,display:'flex',alignItems:'center',borderRadius:14,background:isDark ? '#1a1a2e' : '#F7F3EE',padding:'0 12px'}}>
             <input value={text} onChange={e=>setText(e.target.value)} onKeyDown={handleKey}
-              placeholder="输入消息..." style={{flex:1,border:'none',background:'none',padding:'8px 0',fontSize:15,color:'#3E2723',outline:'none'}}/>
-            <Smile size={18} strokeWidth={1.5} style={{color:'#8D6E63',flexShrink:0}}/>
+              placeholder={t('input.placeholder', lang)} style={{flex:1,border:'none',background:'none',padding:'8px 0',fontSize:15,color:isDark ? '#e0e0e0' : '#3E2723',outline:'none'}}/>
+            <Smile size={18} strokeWidth={1.5} style={{color:isDark ? '#a0a0b0' : '#8D6E63',flexShrink:0}}/>
           </div>
         ) : (
           <button onMouseDown={startRecording} onMouseUp={stopRecording} onTouchStart={startRecording} onTouchEnd={stopRecording}
-            style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:14,background:'#F7F3EE',padding:'10px 0',fontSize:14,fontWeight:500,color:'#8D6E63',border:'none',cursor:'pointer',userSelect:'none',transition:'all 0.15s'}}>
-            按住 说话
+            style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:14,background:isDark ? '#1a1a2e' : '#F7F3EE',padding:'10px 0',fontSize:14,fontWeight:500,color:isDark ? '#a0a0b0' : '#8D6E63',border:'none',cursor:'pointer',userSelect:'none',transition:'all 0.15s'}}>
+            {t('input.hold_talk', lang)}
           </button>
         )}
         {mode==='text' && text.trim() ? (
@@ -130,7 +134,7 @@ export default function InputArea({ onSendText, onSendVoice, onSendImage, onSend
               <div style={{width:56,height:56,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:16,color:'white',boxShadow:'0 4px 12px rgba(0,0,0,0.1)',background:iconBg(item.color)}}>
                 <item.icon size={22} strokeWidth={1.5}/>
               </div>
-              <span style={{fontSize:11,fontWeight:500,color:'#8D6E63'}}>{item.label}</span>
+              <span style={{fontSize:11,fontWeight:500,color:isDark ? '#a0a0b0' : '#8D6E63'}}>{item.label}</span>
             </button>
           ))}
         </div>
@@ -150,8 +154,8 @@ export default function InputArea({ onSendText, onSendVoice, onSendImage, onSend
               style={{width:6,borderRadius:3,background:'linear-gradient(180deg,#C89F7E,#B08968)'}}/>
           ))}
         </div>
-        <p style={{fontSize:16,fontWeight:500,color:'#3E2723'}}>正在录音...</p>
-        <p style={{fontSize:13,color:'#8D6E63'}}>松开 结束</p>
+        <p style={{fontSize:16,fontWeight:500,color:'#3E2723'}}>{t('input.recording', lang)}</p>
+        <p style={{fontSize:13,color:'#8D6E63'}}>{t('input.release_end', lang)}</p>
       </motion.div>
     </motion.div>}</AnimatePresence>
   </>);

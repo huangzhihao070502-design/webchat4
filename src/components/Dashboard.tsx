@@ -4,6 +4,7 @@ import ChatPage from './chat/ChatPage';
 import UserPage from './chat/UserPage';
 import SettingsPage from './chat/SettingsPage';
 import { useSettings } from '../contexts/SettingsContext';
+import { t } from '../lib/i18n';
 
 const API = '';
 
@@ -11,9 +12,9 @@ type Tab = 'chat' | 'user' | 'settings';
 interface Props { onLogout: () => void }
 
 const tabs = [
-  { key: 'chat' as Tab, icon: MessageCircle, label: '聊天' },
-  { key: 'user' as Tab, icon: User, label: '用户' },
-  { key: 'settings' as Tab, icon: Settings, label: '设置' },
+  { key: 'chat' as Tab, icon: MessageCircle, labelKey: 'nav.chat' },
+  { key: 'user' as Tab, icon: User, labelKey: 'nav.user' },
+  { key: 'settings' as Tab, icon: Settings, labelKey: 'nav.settings' },
 ];
 
 const fontSizeMap: Record<string, number> = { small: 13, normal: 14, large: 16 };
@@ -37,8 +38,8 @@ export default function Dashboard({ onLogout }: Props) {
   const [tab, setTab] = useState<Tab>('chat');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeChatUsers, setActiveChatUsers] = useState<Set<string>>(new Set());
-  const { settings } = useSettings();
-  const c = getThemeColors(settings.general_theme);
+  const { settings, resolvedTheme, lang } = useSettings();
+  const c = getThemeColors(resolvedTheme);
   const baseFontSize = fontSizeMap[settings.general_font_size] || 14;
 
   // 轮询获取用户列表和当前选中用户
@@ -91,7 +92,7 @@ export default function Dashboard({ onLogout }: Props) {
           }}>
             {activeChatUsers.size === 0 ? (
               <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.textSec, fontSize: baseFontSize }}>
-                暂无用户，请先连接微信
+                {t('dashboard.no_users', lang)}
               </div>
             ) : Array.from(activeChatUsers).map(uid => (
               <div key={uid} style={{
@@ -125,17 +126,17 @@ export default function Dashboard({ onLogout }: Props) {
           borderTop: `1px solid ${c.border}`, background: c.surface,
           padding: '8px 8px calc(env(safe-area-inset-bottom, 8px))', flexShrink: 0,
         }}>
-          {tabs.map((t) => {
-            const active = tab === t.key;
+          {tabs.map((tabItem) => {
+            const active = tab === tabItem.key;
             return (
-              <button key={t.key} onClick={() => setTab(t.key)}
+              <button key={tabItem.key} onClick={() => setTab(tabItem.key)}
                 style={{
                   position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center',
                   gap: 2, padding: '4px 20px', border: 'none', background: 'none', cursor: 'pointer',
                   transition: 'all 0.15s',
                 }}>
-                <t.icon size={22} strokeWidth={active ? 2 : 1.5} color={active ? c.accentActive : c.textSec + '80'} />
-                <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, color: active ? c.accentActive : c.textSec + '80' }}>{t.label}</span>
+                <tabItem.icon size={22} strokeWidth={active ? 2 : 1.5} color={active ? c.accentActive : c.textSec + '80'} />
+                <span style={{ fontSize: 10, fontWeight: active ? 600 : 400, color: active ? c.accentActive : c.textSec + '80' }}>{t(tabItem.labelKey, lang)}</span>
                 {active && <div style={{
                   position: 'absolute', top: -8, height: 3, width: 32, borderRadius: 2,
                   background: `linear-gradient(135deg, ${c.accent}, ${c.accentActive})`,

@@ -2,6 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Smartphone, CheckCircle, Loader, RefreshCw, Bot, ScanLine, ArrowRight, ShieldCheck, Wifi, Sparkles } from 'lucide-react';
 import MeshBackground from './MeshBackground';
+import { t, Lang } from '../lib/i18n';
+
+function useLocalLang(): Lang {
+  try { const s = JSON.parse(localStorage.getItem('webchat_settings') || '{}'); return s.general_language === 'en' ? 'en' : 'zh-CN'; } catch { return 'zh-CN'; }
+}
 
 const API = '';
 
@@ -12,6 +17,7 @@ const fadeUp = { initial: { opacity: 0, y: 24 }, animate: { opacity: 1, y: 0, tr
 const scaleIn = { initial: { opacity: 0, scale: 0.92 }, animate: { opacity: 1, scale: 1, transition: { type: 'spring', stiffness: 100, damping: 14 } } };
 
 export default function QRConnect({ onConnected, onLogout }: Props) {
+  const lang = useLocalLang();
   const [qrUrl, setQrUrl] = useState('');
   const [qrKey, setQrKey] = useState('');
   const [qrImgUrl, setQrImgUrl] = useState('');
@@ -81,7 +87,7 @@ export default function QRConnect({ onConnected, onLogout }: Props) {
       {/* ---- Logout ---- */}
       <motion.button onClick={onLogout} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.6, duration: 0.5 }}
         className="fixed right-7 top-7 z-50 flex items-center gap-2 rounded-2xl border border-white/40 bg-white/30 px-5 py-2.5 text-[13px] font-medium text-[#6B7280] shadow-sm backdrop-blur-xl transition-all hover:bg-white/60 hover:text-[#111827] hover:shadow-md active:scale-[0.97]">
-        退出登录
+        {t('qr.logout', lang)}
       </motion.button>
 
       <main className="relative z-10 flex min-h-screen items-center justify-center px-5 py-12 sm:px-6">
@@ -129,14 +135,14 @@ export default function QRConnect({ onConnected, onLogout }: Props) {
               transition={{ delay: 0.3, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
               className="text-[48px] font-bold tracking-[-0.03em] text-[#111827]"
               style={{ fontFamily: "'SF Pro Display', 'Inter', system-ui, -apple-system, sans-serif" }}>
-              已连接
+              {t('qr.already_connected', lang)}
             </motion.h1>
 
             {/* ---- Subtitle ---- */}
             <motion.p initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4, duration: 0.5 }}
               className="mt-3 text-[16px] font-normal tracking-wide text-[#6B7280]">
-              微信机器人正在运行
+              {t('qr.bot_running', lang)}
             </motion.p>
 
             {/* ---- Bot info card ---- */}
@@ -178,7 +184,7 @@ export default function QRConnect({ onConnected, onLogout }: Props) {
               className="btn-shine relative mt-10 flex h-[64px] w-full max-w-[320px] items-center justify-center gap-3 overflow-hidden rounded-[24px] text-[16px] font-semibold text-white shadow-xl shadow-gray-900/15 transition-shadow hover:shadow-2xl hover:shadow-gray-900/20"
               style={{ background: 'linear-gradient(135deg, #111827 0%, #2D3748 100%)' }}>
               <span className="relative z-10 flex items-center gap-3">
-                进入聊天界面
+                {t('qr.enter_chat', lang)}
                 <ArrowRight size={18} strokeWidth={2} />
               </span>
             </motion.button>
@@ -198,8 +204,8 @@ export default function QRConnect({ onConnected, onLogout }: Props) {
               style={iconBox('linear-gradient(135deg, #2d2b55 0%, #4a488a 50%, #625f9a 100%)', '0 8px 32px rgba(45,43,85,0.3)')}>
               <Loader size={26} className="animate-spin text-white" />
             </div>
-            <h1 className="text-[26px] font-light tracking-[-0.02em] text-[#1a1a2e]">连接微信</h1>
-            <p className="mt-2 text-[15px] text-[#8a8a9a]">正在准备二维码...</p>
+            <h1 className="text-[26px] font-light tracking-[-0.02em] text-[#1a1a2e]">{t('qr.connect_wechat', lang)}</h1>
+            <p className="mt-2 text-[15px] text-[#8a8a9a]">{t('qr.preparing', lang)}</p>
           </motion.div>
         )}
 
@@ -212,8 +218,8 @@ export default function QRConnect({ onConnected, onLogout }: Props) {
                 style={iconBox('linear-gradient(135deg, #2d2b55 0%, #4a488a 50%, #625f9a 100%)', '0 8px 32px rgba(45,43,85,0.3)')}>
                 <ScanLine size={26} className="text-white" />
               </motion.div>
-              <h1 className="text-[26px] font-light tracking-[-0.02em] text-[#1a1a2e]">连接微信</h1>
-              <p className="mt-2 text-[15px] text-[#8a8a9a]">使用微信扫描下方二维码</p>
+              <h1 className="text-[26px] font-light tracking-[-0.02em] text-[#1a1a2e]">{t('qr.connect_wechat', lang)}</h1>
+              <p className="mt-2 text-[15px] text-[#8a8a9a]">{t('qr.scan_hint', lang)}</p>
             </div>
 
             {/* QR card */}
@@ -226,7 +232,7 @@ export default function QRConnect({ onConnected, onLogout }: Props) {
 
             {/* Steps */}
             <div className="mx-auto mt-8 max-w-[280px] space-y-3">
-              {[{ n: '1', t: '打开微信' }, { n: '2', t: '点击「发现」→「扫一扫」' }, { n: '3', t: '扫描二维码确认连接' }].map((s, i) => (
+              {[{ n: '1', t: t('qr.step1', lang) }, { n: '2', t: t('qr.step2', lang) }, { n: '3', t: t('qr.step3', lang) }].map((s, i) => (
                 <motion.div key={i} initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 + i * 0.12, type: 'spring', stiffness: 120, damping: 14 }}
                   className="flex items-center gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#2d2b55]/10 text-[12px] font-semibold text-[#2d2b55]">{s.n}</span>
@@ -237,7 +243,7 @@ export default function QRConnect({ onConnected, onLogout }: Props) {
 
             <motion.button onClick={fetchQr} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
               className="mt-8 text-[12px] text-[#b0b0ba] underline underline-offset-4 decoration-dotted transition-colors hover:text-[#8a8a9a]">
-              二维码失效？点击刷新
+              {t('qr.expired', lang)}
             </motion.button>
           </motion.div>
         )}
@@ -252,8 +258,8 @@ export default function QRConnect({ onConnected, onLogout }: Props) {
                 <Smartphone size={26} className="text-white" />
               </motion.div>
             </div>
-            <h1 className="text-[26px] font-light tracking-[-0.02em] text-[#1a1a2e]">已扫码</h1>
-            <p className="mt-2 text-[15px] text-[#8a8a9a]">请在手机上确认连接</p>
+            <h1 className="text-[26px] font-light tracking-[-0.02em] text-[#1a1a2e]">{t('qr.scanned', lang)}</h1>
+            <p className="mt-2 text-[15px] text-[#8a8a9a]">{t('qr.confirm_on_phone', lang)}</p>
             <div className="mx-auto mt-10 flex items-center justify-center gap-3">
               {[0,1,2].map(i => (
                 <motion.div key={i} animate={{ opacity: [0.2, 1, 0.2], scale: [0.8, 1.2, 0.8] }}
@@ -272,8 +278,8 @@ export default function QRConnect({ onConnected, onLogout }: Props) {
               style={iconBox('linear-gradient(135deg, #059669 0%, #10b981 100%)', '0 12px 40px rgba(5,150,105,0.35)')}>
               <CheckCircle size={40} className="text-white" />
             </motion.div>
-            <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-[28px] font-light text-[#1a1a2e]">连接成功</motion.h1>
-            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="mt-2 text-[15px] text-[#8a8a9a]">正在进入聊天界面...</motion.p>
+            <motion.h1 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-[28px] font-light text-[#1a1a2e]">{t('qr.connected', lang)}</motion.h1>
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="mt-2 text-[15px] text-[#8a8a9a]">{t('qr.entering_chat', lang)}</motion.p>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="mx-auto mt-10 flex gap-2">
               {[0,1,2].map(i => (
                 <motion.div key={i} animate={{ y: [0, -10, 0] }} transition={{ repeat: Infinity, duration: 0.7, delay: i * 0.18 }}
@@ -289,11 +295,11 @@ export default function QRConnect({ onConnected, onLogout }: Props) {
             <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-3xl border border-red-200 bg-red-50/60 shadow-sm">
               <Wifi size={26} className="text-red-400" />
             </div>
-            <h1 className="text-[26px] font-light text-[#1a1a2e]">连接失败</h1>
-            <p className="mt-2 text-[15px] text-[#8a8a9a]">无法获取二维码，请检查网络后重试</p>
+            <h1 className="text-[26px] font-light text-[#1a1a2e]">{t('qr.error', lang)}</h1>
+            <p className="mt-2 text-[15px] text-[#8a8a9a]">{t('qr.error_desc', lang)}</p>
             <button onClick={fetchQr} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
               className="mx-auto mt-8 inline-flex h-11 items-center gap-2 rounded-xl bg-[#2d2b55] px-6 text-[14px] font-medium text-white shadow-lg shadow-[#2d2b55]/20 transition-all hover:bg-[#4a488a]">
-              <RefreshCw size={15} /> 重新连接
+              <RefreshCw size={15} /> {t('qr.retry', lang)}
             </button>
           </motion.div>
         )}

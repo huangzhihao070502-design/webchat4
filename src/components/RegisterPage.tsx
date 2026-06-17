@@ -4,6 +4,11 @@ import { UserPlus, Check } from 'lucide-react';
 import MeshBackground from './MeshBackground';
 import InputField from './InputField';
 import { register, isRegistered } from '../lib/auth';
+import { t, Lang } from '../lib/i18n';
+
+function useLocalLang(): Lang {
+  try { const s = JSON.parse(localStorage.getItem('webchat_settings') || '{}'); return s.general_language === 'en' ? 'en' : 'zh-CN'; } catch { return 'zh-CN'; }
+}
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                             */
@@ -42,6 +47,7 @@ function Spinner() {
 interface Props { onLogin: () => void; }
 
 export default function RegisterPage({ onLogin }: Props) {
+  const lang = useLocalLang();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -52,12 +58,12 @@ export default function RegisterPage({ onLogin }: Props) {
 
   const validate = useCallback((): boolean => {
     const next: FormErrors = {};
-    if (!email.trim()) next.email = '请输入邮箱地址';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) next.email = '邮箱格式不正确';
-    if (!password) next.password = '请输入密码';
-    else if (password.length < 6) next.password = '密码至少需要6个字符';
-    if (!confirm) next.confirm = '请确认密码';
-    else if (password !== confirm) next.confirm = '两次密码不一致';
+    if (!email.trim()) next.email = t('login.email_required', lang);
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) next.email = t('login.email_invalid', lang);
+    if (!password) next.password = t('login.password_required', lang);
+    else if (password.length < 6) next.password = t('login.password_short', lang);
+    if (!confirm) next.confirm = t('register.confirm_required', lang);
+    else if (password !== confirm) next.confirm = t('register.password_mismatch', lang);
     setErrors(next);
     if (Object.keys(next).length > 0) setShakeKey((k) => k + 1);
     return Object.keys(next).length === 0;
@@ -92,8 +98,8 @@ export default function RegisterPage({ onLogin }: Props) {
               transition={{ type: 'spring', stiffness: 400, damping: 17 }}>
               <UserPlus size={22} strokeWidth={1.5} className="text-white" />
             </motion.div>
-            <h1 className="text-[26px] font-light tracking-[-0.02em] text-[#1a1a2e]">创建账号</h1>
-            <p className="mt-2 text-[15px] font-normal leading-relaxed text-[#8a8a9a]">注册后即可登录使用</p>
+            <h1 className="text-[26px] font-light tracking-[-0.02em] text-[#1a1a2e]">{t('register.title', lang)}</h1>
+            <p className="mt-2 text-[15px] font-normal leading-relaxed text-[#8a8a9a]">{t('register.subtitle', lang)}</p>
           </motion.div>
 
           <motion.div variants={cardVariants} className="rounded-2xl border border-white/70 bg-white/75 p-7 backdrop-blur-2xl sm:p-8"
@@ -106,15 +112,15 @@ export default function RegisterPage({ onLogin }: Props) {
             )}
             <form onSubmit={handleSubmit} noValidate aria-label="注册表单" className="space-y-5">
               <motion.div variants={itemVariants} key={`email-${shakeKey}`} className={errors.email ? 'shake' : ''}>
-                <InputField id="reg-email" label="邮箱地址" type="email" value={email} onChange={handleEmailChange}
+                <InputField id="reg-email" label={t('login.email', lang)} type="email" value={email} onChange={handleEmailChange}
                   error={errors.email} autoComplete="email" inputMode="email" spellCheck={false} autoFocus />
               </motion.div>
               <motion.div variants={itemVariants} key={`pw-${shakeKey}`} className={errors.password ? 'shake' : ''}>
-                <InputField id="reg-password" label="密码" value={password} onChange={handlePasswordChange}
+                <InputField id="reg-password" label={t('login.password', lang)} value={password} onChange={handlePasswordChange}
                   error={errors.password} isPassword autoComplete="new-password" />
               </motion.div>
               <motion.div variants={itemVariants} key={`confirm-${shakeKey}`} className={errors.confirm ? 'shake' : ''}>
-                <InputField id="reg-confirm" label="确认密码" value={confirm} onChange={handleConfirmChange}
+                <InputField id="reg-confirm" label={t('register.confirm_password', lang)} value={confirm} onChange={handleConfirmChange}
                   error={errors.confirm} isPassword autoComplete="new-password" />
               </motion.div>
               <motion.div variants={itemVariants} className="pt-1">
@@ -123,17 +129,17 @@ export default function RegisterPage({ onLogin }: Props) {
                   style={{ background: loading ? 'linear-gradient(135deg, #2d2b55 0%, #4a488a 100%)' : 'linear-gradient(135deg, #2d2b55 0%, #4a488a 60%, #625f9a 100%)', boxShadow: loading ? '0 2px 8px rgba(45,43,85,0.2)' : '0 4px 16px rgba(45,43,85,0.25), 0 1px 4px rgba(45,43,85,0.15)' }}
                   aria-label={loading ? '注册中...' : '注册'}>
                   {loading ? (
-                    <span className="flex items-center gap-2.5"><Spinner /><span className="text-white/90">注册中...</span></span>
+                    <span className="flex items-center gap-2.5"><Spinner /><span className="text-white/90">{t('register.registering', lang)}</span></span>
                   ) : (
-                    <span className="flex items-center gap-2"><UserPlus size={16} strokeWidth={1.5} />注册</span>
+                    <span className="flex items-center gap-2"><UserPlus size={16} strokeWidth={1.5} />{t('register.submit', lang)}</span>
                   )}
                 </button>
               </motion.div>
               <motion.p variants={itemVariants} className="pt-2 text-center text-[14px] text-[#8a8a9a]">
-                已有账号？{' '}
+                {t('register.has_account', lang)}{' '}
                 <a href="#" onClick={(e) => { e.preventDefault(); onLogin(); }}
                   className="font-medium text-[#2d2b55] transition-colors duration-200 hover:text-[#4a488a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2d2b55]/30 focus-visible:rounded" tabIndex={0}>
-                  去登录
+                  {t('register.go_login', lang)}
                 </a>
               </motion.p>
             </form>

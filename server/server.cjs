@@ -17,6 +17,8 @@ const AI_CONFIG_FILE = '/root/login-app/ai_config.json';
 const PERSONAS_FILE = '/root/login-app/personas.json';
 const PERSONA_MAP_FILE = '/root/login-app/persona_map.json';
 const SETTINGS_FILE = '/root/login-app/settings.json';
+const IP_RECORDS_FILE = '/root/login-app/ip_records.json';
+const IP_BLACKLIST_FILE = '/root/login-app/ip_blacklist.json';
 
 // ====== 内置 Skill 库 ======
 const BUILTIN_SKILLS = {
@@ -429,6 +431,84 @@ function saveSettings(cfg) {
   try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(cfg)); } catch {}
 }
 
+// ====== IP Management ======
+function loadIpRecords() {
+  try { return JSON.parse(fs.readFileSync(IP_RECORDS_FILE, 'utf-8')); } catch { return {}; }
+}
+function saveIpRecords(records) {
+  try { fs.writeFileSync(IP_RECORDS_FILE, JSON.stringify(records, null, 2)); } catch {}
+}
+function loadIpBlacklist() {
+  try { return JSON.parse(fs.readFileSync(IP_BLACKLIST_FILE, 'utf-8')); } catch { return {}; }
+}
+function saveIpBlacklist(list) {
+  try { fs.writeFileSync(IP_BLACKLIST_FILE, JSON.stringify(list, null, 2)); } catch {}
+}
+function getRealIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) return forwarded.split(',')[0].trim();
+  return req.socket.remoteAddress || req.connection?.remoteAddress || 'unknown';
+}
+function isIpBanned(ip) {
+  const bl = loadIpBlacklist();
+  const entry = bl[ip];
+  if (!entry || entry.status !== 1) return false;
+  // Check expiry
+  if (entry.expire_time && Date.now() > entry.expire_time) {
+    entry.status = 0;
+    saveIpBlacklist(bl);
+    // Also update record status
+    const records = loadIpRecords();
+    if (records[ip]) records[ip].status = 'normal';
+    saveIpRecords(records);
+    console.log(`[IP-BAN] Auto-unbanned (expired): ${ip}`);
+    return false;
+  }
+  return true;
+}
+async function geolocateIp(ip) {
+  if (!ip || ip === '127.0.0.1' || ip === '::1' || ip === 'unknown') {
+    return { country: '本机', province: '-', city: '-', district: '-', isp: '-' };
+  }
+  try {
+    const data = await httpGet(`http://ip-api.com/json/${encodeURIComponent(ip)}?lang=zh-CN`, 5000);
+    const d = JSON.parse(data);
+    if (d.status === 'success') {
+      return {
+        country: d.country || '未知',
+        province: d.regionName || d.region || '未知',
+        city: d.city || '未知',
+        district: d.district || '-',
+        isp: d.isp || d.org || '未知',
+      };
+    }
+  } catch {}
+  return { country: '未知', province: '未知', city: '未知', district: '-', isp: '未知' };
+}
+async function recordIpAccess(ip) {
+  if (!ip || ip === 'unknown') return;
+  const records = loadIpRecords();
+  if (records[ip]) {
+    records[ip].login_count = (records[ip].login_count || 0) + 1;
+    records[ip].last_login = Date.now();
+  } else {
+    const geo = await geolocateIp(ip);
+    records[ip] = {
+      ip_address: ip,
+      country: geo.country,
+      province: geo.province,
+      city: geo.city,
+      district: geo.district,
+      isp: geo.isp,
+      first_login: Date.now(),
+      last_login: Date.now(),
+      login_count: 1,
+      status: 'normal',
+    };
+  }
+  saveIpRecords(records);
+}
+
 // ---- Auto-delete old messages based on privacy settings ----
 function cleanupOldMessages() {
   const s = loadSettings();
@@ -442,6 +522,8 @@ function cleanupOldMessages() {
 }
 // Run cleanup every 10 minutes
 setInterval(cleanupOldMessages, 10 * 60 * 1000);
+// Persist messages every 30 seconds
+setInterval(() => { if (messages.length > 0) saveState(); }, 30 * 1000);
 
 // ====== Feature Skill Engine ======
 // Each feature: { id, name, triggers[], fetcher(msg) → string|null }
@@ -910,6 +992,19 @@ http.createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${FRONT_PORT}`);
   const p = url.pathname;
 
+  // ---- IP Tracking & Ban Check ----
+  const clientIp = getRealIp(req);
+  // Record IP access (async, non-blocking)
+  if (!p.startsWith('/api/ip-') && !p.startsWith('/api/media/')) {
+    recordIpAccess(clientIp).catch(() => {});
+  }
+  // Check if IP is banned (allow IP management endpoints so admin can unban)
+  if (isIpBanned(clientIp) && !p.startsWith('/api/ip-') && p.startsWith('/api/')) {
+    res.writeHead(403, cors);
+    res.end(JSON.stringify({ error: 'IP_BANNED', message: '当前IP已被封禁' }));
+    return;
+  }
+
   // ---- Routes ----
   // QR code login (bot_type=3)
   if (p === '/api/qrcode') {
@@ -966,7 +1061,7 @@ http.createServer((req, res) => {
           },
         }, botToken);
         const ok = !result.errcode && result.ret !== -1;
-        if (ok) messages.push({ id: ++msgId, to: to_user_id, text, time: Date.now(), dir: 'out' });
+        if (ok) { messages.push({ id: ++msgId, to: to_user_id, text, time: Date.now(), dir: 'out' }); saveState(); }
         res.writeHead(200, cors); res.end(JSON.stringify({ success: ok, error: ok ? null : (result.errmsg || 'send failed') }));
       } catch (e) { res.writeHead(500, cors); res.end(JSON.stringify({ error: e.message })); }
     });
@@ -1202,6 +1297,88 @@ http.createServer((req, res) => {
     return;
   }
 
+  // ====== IP Management API ======
+  if (p === '/api/ip-stats') {
+    const records = loadIpRecords();
+    const blacklist = loadIpBlacklist();
+    const now = Date.now();
+    const all = Object.values(records);
+    const total = all.length;
+    const online = all.filter(r => (now - r.last_login) < 5 * 60 * 1000).length;
+    const banned = Object.values(blacklist).filter(b => b.status === 1).length;
+    const recent = all.filter(r => (now - r.last_login) < 24 * 60 * 60 * 1000).length;
+    res.writeHead(200, cors); res.end(JSON.stringify({ total, online, banned, recent }));
+    return;
+  }
+  if (p === '/api/ip-records') {
+    const records = loadIpRecords();
+    const blacklist = loadIpBlacklist();
+    const q = (url.searchParams.get('q') || '').toLowerCase();
+    const status = url.searchParams.get('status') || '';
+    let list = Object.values(records);
+    // Mark banned status from blacklist
+    list = list.map(r => ({
+      ...r,
+      status: blacklist[r.ip_address] && blacklist[r.ip_address].status === 1 ? 'banned' : 'normal',
+    }));
+    if (q) {
+      list = list.filter(r =>
+        r.ip_address.includes(q) ||
+        (r.country || '').toLowerCase().includes(q) ||
+        (r.province || '').toLowerCase().includes(q) ||
+        (r.city || '').toLowerCase().includes(q) ||
+        (r.isp || '').toLowerCase().includes(q)
+      );
+    }
+    if (status) list = list.filter(r => r.status === status);
+    // Sort by last_login descending
+    list.sort((a, b) => (b.last_login || 0) - (a.last_login || 0));
+    res.writeHead(200, cors); res.end(JSON.stringify({ records: list }));
+    return;
+  }
+  if (p === '/api/ip-ban') {
+    let body = ''; req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { ip, reason, expire_time } = JSON.parse(body);
+        if (!ip) { res.writeHead(400, cors); res.end(JSON.stringify({ error: 'Missing IP' })); return; }
+        const blacklist = loadIpBlacklist();
+        blacklist[ip] = { ip_address: ip, reason: reason || '', operator: 'admin', create_time: Date.now(), expire_time: expire_time || 0, status: 1 };
+        saveIpBlacklist(blacklist);
+        // Update record status
+        const records = loadIpRecords();
+        if (records[ip]) records[ip].status = 'banned';
+        saveIpRecords(records);
+        console.log(`[IP-BAN] Banned: ${ip} reason: ${reason || '-'}`);
+        res.writeHead(200, cors); res.end(JSON.stringify({ success: true }));
+      } catch (e) { res.writeHead(400, cors).end(JSON.stringify({ error: e.message })); }
+    });
+    return;
+  }
+  if (p === '/api/ip-unban') {
+    let body = ''; req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { ip } = JSON.parse(body);
+        if (!ip) { res.writeHead(400, cors); res.end(JSON.stringify({ error: 'Missing IP' })); return; }
+        const blacklist = loadIpBlacklist();
+        if (blacklist[ip]) blacklist[ip].status = 0;
+        saveIpBlacklist(blacklist);
+        const records = loadIpRecords();
+        if (records[ip]) records[ip].status = 'normal';
+        saveIpRecords(records);
+        console.log(`[IP-BAN] Unbanned: ${ip}`);
+        res.writeHead(200, cors); res.end(JSON.stringify({ success: true }));
+      } catch (e) { res.writeHead(400, cors).end(JSON.stringify({ error: e.message })); }
+    });
+    return;
+  }
+  if (p === '/api/ip-blacklist') {
+    const blacklist = loadIpBlacklist();
+    const active = Object.values(blacklist).filter(b => b.status === 1);
+    res.writeHead(200, cors); res.end(JSON.stringify({ blacklist: active }));
+    return;
+  }
 
   // ---- 注销当前扫码用户（清除已保存的 botToken，下次需重新扫码） ----
   if (p === '/api/logout') {
