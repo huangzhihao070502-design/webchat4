@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, Component, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import LoginPage from './components/LoginPage';
 import RegisterPage from './components/RegisterPage';
@@ -7,6 +7,27 @@ import Dashboard from './components/Dashboard';
 import { SettingsProvider } from './contexts/SettingsContext';
 
 type Page = 'login' | 'register' | 'qrcode' | 'dashboard';
+
+/* Error Boundary */
+class ErrorBoundary extends Component<{children: ReactNode}, {error: string|null}> {
+  state = { error: null as string|null };
+  static getDerivedStateFromError(e: Error) { return { error: e.message }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{padding:40,textAlign:'center',fontFamily:'Inter,system-ui,sans-serif'}}>
+          <h2 style={{color:'#ef4444'}}>出错了</h2>
+          <p style={{color:'#666',margin:'12px 0'}}>{this.state.error}</p>
+          <button onClick={()=>{localStorage.clear();location.reload()}}
+            style={{padding:'10px 24px',borderRadius:12,border:'none',background:'#C89F7E',color:'white',cursor:'pointer',fontSize:14}}>
+            清除缓存并刷新
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function App() {
   const [page, setPage] = useState<Page>('login');
@@ -40,6 +61,7 @@ export default function App() {
   if (!initialized) return null;
 
   return (
+    <ErrorBoundary>
     <AnimatePresence mode="wait">
       {page === 'login' && (
         <motion.div key="login" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
@@ -64,5 +86,6 @@ export default function App() {
         </motion.div>
       )}
     </AnimatePresence>
+    </ErrorBoundary>
   );
 }
