@@ -74,25 +74,24 @@ export default function ChatPage({ userId }: Props) {
 
   // Check if current time is within quiet hours
   const isQuietHours = useCallback(() => {
-    if (!settings.notify_quiet_enabled) return false;
+    if (!(settings as any).notify_quiet_enabled) return false;
     const now = new Date();
     const hhmm = now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0");
-    const start = settings.notify_quiet_start;
-    const end = settings.notify_quiet_end;
+    const start = (settings as any).notify_quiet_start || "22:00";
+    const end = (settings as any).notify_quiet_end || "08:00";
     if (start <= end) return hhmm >= start && hhmm < end;
-    // Cross midnight: e.g. 22:00 ~ 08:00
     return hhmm >= start || hhmm < end;
-  }, [settings.notify_quiet_enabled, settings.notify_quiet_start, settings.notify_quiet_end]);
+  }, [(settings as any).notify_quiet_enabled, (settings as any).notify_quiet_start, (settings as any).notify_quiet_end]);
 
   // Trigger notification for incoming message
   const notifyIncoming = useCallback((text: string, fromUser: string) => {
     if (isQuietHours()) return;
-    if (settings.notify_sound) playNotifySound();
-    if (settings.notify_desktop && "Notification" in window && Notification.permission === "granted") {
+    if ((settings as any).notify_sound) playNotifySound();
+    if ((settings as any).notify_desktop && "Notification" in window && Notification.permission === "granted") {
       const label = fromUser ? fromUser.slice(0, 8) + "..." : "新消息";
       new Notification(label, { body: text.slice(0, 80), icon: "/favicon.ico" });
     }
-  }, [settings.notify_sound, settings.notify_desktop, isQuietHours, playNotifySound]);
+  }, [(settings as any).notify_sound, (settings as any).notify_desktop, isQuietHours, playNotifySound]);
 
   // ── 消息轮询（每个用户独立实例） ──
   useEffect(() => {
