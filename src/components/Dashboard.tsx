@@ -38,7 +38,10 @@ export default function Dashboard({ onLogout }: Props) {
   const [tab, setTab] = useState<Tab>('chat');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [activeChatUsers, setActiveChatUsers] = useState<Set<string>>(new Set());
-  const { settings, resolvedTheme, lang } = useSettings();
+  const settingsCtx = useSettings();
+  const settings = settingsCtx?.settings || { general_font_size: 'normal', general_language: 'zh-CN', general_theme: 'auto' };
+  const resolvedTheme = settingsCtx?.resolvedTheme || 'light';
+  const lang = settingsCtx?.lang || 'zh-CN';
   const c = getThemeColors(resolvedTheme);
   const baseFontSize = fontSizeMap[settings.general_font_size] || 14;
 
