@@ -8,7 +8,9 @@ const API = '';
 interface Props { onSwitchUser?: (userId: string) => void }
 
 export default function UserPage({ onSwitchUser }: Props) {
-  const { resolvedTheme, lang } = useSettings();
+  const settingsCtx = useSettings();
+  const resolvedTheme = settingsCtx?.resolvedTheme || 'light';
+  const lang = settingsCtx?.lang || 'zh-CN';
   const isDark = resolvedTheme === 'dark';
   const [users, setUsers] = useState<string[]>([]);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
